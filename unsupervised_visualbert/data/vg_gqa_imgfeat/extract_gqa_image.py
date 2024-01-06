@@ -4,7 +4,7 @@
 BUTD_ROOT = '/opt/butd/'
 
 import os, sys
-sys.path.insert(0, BUTD_ROOT + "/tools")
+sys.path.insert(0, f"{BUTD_ROOT}/tools")
 os.environ['GLOG_minloglevel'] = '2'
 
 import _init_paths
@@ -45,7 +45,7 @@ def load_image_ids(img_root):
 def generate_tsv(prototxt, weights, image_ids, outfile):
     # First check if file exists, and if it is complete
     # never use set, it loses the order!!! F***
-    wanted_ids = set([image_id[1] for image_id in image_ids])
+    wanted_ids = {image_id[1] for image_id in image_ids}
     found_ids = set()
     if os.path.exists(outfile):
         with open(outfile, "r") as tsvfile:
@@ -147,8 +147,7 @@ def parse_args():
     parser.add_argument('--split', type=str, default='valid')
     parser.add_argument('--caffemodel', type=str, default='./resnet101_faster_rcnn_final_iter_320000.caffemodel')
 
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()
 
 
 if __name__ == '__main__':
@@ -156,10 +155,10 @@ if __name__ == '__main__':
     args = parse_args()
 
 
-    args.cfg_file = BUTD_ROOT + "experiments/cfgs/faster_rcnn_end2end_resnet.yml" # s = 500
-    args.prototxt = BUTD_ROOT + "models/vg/ResNet-101/faster_rcnn_end2end_final/test.prototxt"
-    args.outfile = "%s_obj36.tsv" % "vg_gqa"
-    
+    args.cfg_file = f"{BUTD_ROOT}experiments/cfgs/faster_rcnn_end2end_resnet.yml"
+    args.prototxt = f"{BUTD_ROOT}models/vg/ResNet-101/faster_rcnn_end2end_final/test.prototxt"
+    args.outfile = 'vg_gqa_obj36.tsv'
+
     print('Called with args:')
     print(args)
 
@@ -172,6 +171,6 @@ if __name__ == '__main__':
 
     # Load image ids, need modification for new datasets.
     image_ids = load_image_ids(args.imgroot)  
-    
+
     # Generate TSV files, noramlly do not need to modify
     generate_tsv(args.prototxt, args.caffemodel, image_ids, args.outfile)

@@ -2,9 +2,10 @@
 import json
 split = "valid"
 
-target = "/local/harold/ubert/lxmert/data/lxmert/nlvr_for_pretrain_{}.json".format(split)
+target = (
+    f"/local/harold/ubert/lxmert/data/lxmert/nlvr_for_pretrain_{split}.json")
 
-train_file_name = "/local/harold/ubert/lxmert/data/nlvr2/{}.json".format(split)
+train_file_name = f"/local/harold/ubert/lxmert/data/nlvr2/{split}.json"
 train_data = []
 
 with open(train_file_name) as f:
@@ -18,19 +19,17 @@ with open(train_file_name) as f:
 for one_data in data:
     
 
-    one_datatum = {}
-    one_datatum["img_id"] = one_data["img0"]
-    one_datatum["img_id_1"] = one_data["img1"]
-
-    one_datatum["uid"] = one_data["uid"]
-    one_datatum["identifier"] = one_data["identifier"]
-    one_datatum["label"] =  one_data["label"]
-    
-    one_datatum["labelf"] = {}
-    one_datatum["sentf"] = {}
-    one_datatum["sentf"]["nlvr"] = []
-    one_datatum["sentf"]["nlvr"].append(one_data["sent"])
-    train_data.append(one_datatum)
+  one_datatum = {
+      "img_id": one_data["img0"],
+      "img_id_1": one_data["img1"],
+      "uid": one_data["uid"],
+      "identifier": one_data["identifier"],
+      "label": one_data["label"],
+      "labelf": {},
+      "sentf": {},
+  }
+  one_datatum["sentf"]["nlvr"] = [one_data["sent"]]
+  train_data.append(one_datatum)
 
 with open(target, 'w') as f:
     json.dump(train_data, f)

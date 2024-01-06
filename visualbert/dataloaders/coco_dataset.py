@@ -51,7 +51,7 @@ class COCODataset(Dataset):
         ########## Loading Annotations
         self.items = self.coco.loadAnns(self.coco.getAnnIds())
 
-        print("{} of captions in total.".format(len(self.items)))
+        print(f"{len(self.items)} of captions in total.")
 
         self.image_feat_reader = faster_RCNN_feat_reader()
 
@@ -67,9 +67,14 @@ class COCODataset(Dataset):
                     new_chunk[image_id] = screen_feature(image_feat_variable, image_boxes,confidence, args.image_screening_parameters)
                     average += new_chunk[image_id][2]
                 else:
-                    new_chunk[image_id+".npz"] = screen_feature(image_feat_variable, image_boxes,confidence, args.image_screening_parameters)
-                    average += new_chunk[image_id+".npz"][2]
-            print("{} features on average.".format(average/len(self.chunk)))
+                    new_chunk[f"{image_id}.npz"] = screen_feature(
+                        image_feat_variable,
+                        image_boxes,
+                        confidence,
+                        args.image_screening_parameters,
+                    )
+                    average += new_chunk[f"{image_id}.npz"][2]
+            print(f"{average / len(self.chunk)} features on average.")
             self.chunk = new_chunk
 
 
@@ -99,7 +104,7 @@ class COCODataset(Dataset):
                 else:
                     # For some images, the detector seems to have Null output. Thus we just skip them. This will not affect much.
                     counter += 1
-            print("Discarded {} instances in {}.".format(counter, self.split_name))
+            print(f"Discarded {counter} instances in {self.split_name}.")
             self.items = items
 
     def get_image_features_by_training_index(self, index):
@@ -234,7 +239,6 @@ class COCODataset(Dataset):
 
     def __getitem_detector__(self, index):
         item = self.items[index]
-        sample = {}
         if self.expanded and index >= self.train_size:
             image_file_name = "COCO_val2014_{:0>12d}.jpg".format(item['image_id'])
         else:
@@ -267,7 +271,7 @@ class COCODataset(Dataset):
         boxes *= img_scale
         boxes[:, :2] += np.array(padding[:2])[None]
         boxes[:, 2:] += np.array(padding[:2])[None]
-        
+
         try:
             metadata['names'] = [i.split(" ")[1][1:-1] for i in metadata["names"]]
         except:
@@ -277,7 +281,7 @@ class COCODataset(Dataset):
         segms = np.concatenate((np.ones((1, 14, 14), dtype=np.float32), segms), 0)
         obj_labels = [self.coco_obj_to_ind['__background__']] + obj_labels
 
-        sample['segms'] = ArrayField(segms, padding_value=0)
+        sample = {'segms': ArrayField(segms, padding_value=0)}
         sample['objects'] = ListField([LabelField(x, skip_indexing=True) for x in obj_labels])
 
         if not np.all((boxes[:, 0] >= 0.) & (boxes[:, 0] < boxes[:, 2])):
@@ -290,7 +294,7 @@ class COCODataset(Dataset):
 
         caption_a = item["caption"]
         imageID = item["image_id"]
-        
+
         sample["label"] = sample['objects'] # This is an useless field. Just so that they know the batch size.
 
         if self.expanded and index >= self.train_size:
@@ -360,7 +364,6 @@ class COCODataset(Dataset):
             import time
             import mmap
             csv.field_size_limit(sys.maxsize)
-            FIELDNAMES = ['image_id', 'image_w','image_h','num_boxes', 'boxes', 'features']
             infiles = [
             os.path.join(data_root, "trainval/karpathy_test_resnet101_faster_rcnn_genome.tsv"),
             os.path.join(data_root, "trainval/karpathy_train_resnet101_faster_rcnn_genome.tsv.0"),
@@ -371,6 +374,7 @@ class COCODataset(Dataset):
             chunk_file = os.path.join(data_root, "trainval/resnet101_genome.th")
             if not os.path.exists(chunk_file):
                 print("Loading COCO files for Flickr30K for the first time...")
+                FIELDNAMES = ['image_id', 'image_w','image_h','num_boxes', 'boxes', 'features']
                 for infile in infiles:
                     with open(infile, "r+") as tsv_in_file:
                         reader = csv.DictReader(tsv_in_file, delimiter='\t', fieldnames = FIELDNAMES)
@@ -394,10 +398,14 @@ class COCODataset(Dataset):
 
         copy_args = deepcopy(args)
         copy_args.split_name = "train"
-        copy_args.annots_path = os.path.join(data_root, "annotations/captions_{}2014.json".format(copy_args.split_name))
+        copy_args.annots_path = os.path.join(
+            data_root, f"annotations/captions_{copy_args.split_name}2014.json"
+        )
 
         if args.image_feature_type == "nlvr":
-            copy_args.chunk_path = os.path.join(data_root, "coco_features_{}_150.th".format(copy_args.split_name))
+            copy_args.chunk_path = os.path.join(
+                data_root, f"coco_features_{copy_args.split_name}_150.th"
+            )
 
         copy_args.data_root = data_root
         copy_args.masks = masks
@@ -408,9 +416,13 @@ class COCODataset(Dataset):
 
         copy_args = deepcopy(args)
         copy_args.split_name = "val"
-        copy_args.annots_path = os.path.join(data_root, "annotations/captions_{}2014.json".format(copy_args.split_name))
+        copy_args.annots_path = os.path.join(
+            data_root, f"annotations/captions_{copy_args.split_name}2014.json"
+        )
         if args.image_feature_type == "nlvr":
-            copy_args.chunk_path = os.path.join(data_root, "coco_features_{}_150.th".format(copy_args.split_name))
+            copy_args.chunk_path = os.path.join(
+                data_root, f"coco_features_{copy_args.split_name}_150.th"
+            )
         copy_args.data_root = data_root
         copy_args.masks = masks
 
@@ -428,27 +440,28 @@ class COCODataset(Dataset):
 
             trainset.coco_val = validationset.coco
 
-            if args.image_feature_type != "r2c" and args.image_feature_type != "vqa_fix_100" and args.image_feature_type != "flickr": # For NLVR, we pre-load features so we need to expand the chunk as well
+            if args.image_feature_type not in ["r2c", "vqa_fix_100", "flickr"]: # For NLVR, we pre-load features so we need to expand the chunk as well
                 trainset.chunk_val = validationset.chunk
 
             imdb = np.load(os.path.join(data_root, "data/imdb/imdb_minival2014.npy"), allow_pickle = True)[1:]
-            image_names_mini_val = set([i["image_name"] + ".jpg" for i in imdb])
+            image_names_mini_val = {i["image_name"] + ".jpg" for i in imdb}
 
             if args.get("exclude_minival", False):
                 trainset.items = [i for i in trainset.items if "COCO_val2014_{:0>12d}.jpg".format(i['image_id']) not in image_names_mini_val]
 
             validationset.items = [i for i in validationset.items if "COCO_val2014_{:0>12d}.jpg".format(i['image_id']) in image_names_mini_val]
-            print("After expanding, train has {} items, val has {} items".format(len(trainset.items), len(validationset.items)))
+            print(
+                f"After expanding, train has {len(trainset.items)} items, val has {len(validationset.items)} items"
+            )
 
         testset = validationset # Testset will not be used so this is just a placeholder
-        return trainset, validationset, testset
+        return trainset, testset, testset
 
     @staticmethod
     def collate_fn(data):
         if isinstance(data[0], Instance):
             batch = Batch(data)
             td = batch.as_tensor_dict()
-            return td
         else:
             images, instances = zip(*data)
             images = torch.stack(images, 0)
@@ -457,4 +470,5 @@ class COCODataset(Dataset):
             td = batch.as_tensor_dict()
             td['box_mask'] = torch.all(td['boxes'] >= 0, -1).long()
             td['images'] = images
-            return td
+
+        return td

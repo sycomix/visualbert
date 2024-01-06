@@ -20,26 +20,26 @@ def pad_np_arrays(list_of_np_array, padding_value, dtype):
 
     padding_lengths = get_padding_lengths(list_of_np_array)
 
-    max_shape = [padding_lengths["dimension_{}".format(i)]
-                    for i in range(len(padding_lengths))]
+    max_shape = [
+        padding_lengths[f"dimension_{i}"] for i in range(len(padding_lengths))
+    ]
 
     # Convert explicitly to an ndarray just in case it's an scalar (it'd end up not being an ndarray otherwise)
     final_list = []
 
-    for array_index, array in enumerate(list_of_np_array):
+    for array in list_of_np_array:
         return_array = numpy.asarray(numpy.ones(max_shape, dtype = dtype) * padding_value)
         # If the tensor has a different shape from the largest tensor, pad dimensions with zeros to
         # form the right shaped list of slices for insertion into the final tensor.
         slicing_shape = list(array.shape)
         #if len(array.shape) < len(max_shape):
         #    slicing_shape = slicing_shape + [0 for _ in range(len(max_shape) - len(array.shape))]
-        slices = tuple([slice(0, x) for x in slicing_shape])
+        slices = tuple(slice(0, x) for x in slicing_shape)
 
         return_array[slices] = array
         final_list.append(return_array)
     final_list = np.stack(final_list, 0)
-    tensor = torch.from_numpy(final_list)
-    return tensor
+    return torch.from_numpy(final_list)
 
 def transfer_object_labels_to_symbolic_ids(obj_labels, attribute_labels, symbolic_vocab, obj_confs = None, attr_confs = None):
     return_list = []
@@ -86,8 +86,7 @@ def convert_semantic_objective(labels, symbolic_vocab, obj = False, attr = False
     else:
         assert(0)
     words = [symbolic_vocab.id2objective[symbolic_vocab.word2id[i]] for i in words]
-    semantic_objective = np.array(words, dtype=np.int64) # object_num * 2
-    return semantic_objective
+    return np.array(words, dtype=np.int64)
     
 def create_tags_pretrain(obj_labels, attr_labels, obj_confs, attr_confs, tokenizer, symbolic_vocab, visual_tags_box, feat_mask, use_bert_input = True):
     obj_labels_transformed = transfer_object_labels_to_symbolic_ids(obj_labels, attr_labels, symbolic_vocab, obj_confs, attr_confs)
@@ -102,26 +101,29 @@ def create_tags_pretrain(obj_labels, attr_labels, obj_confs, attr_confs, tokeniz
             seg_id = symbolic_vocab.get_seg_id(tag)
         sub_tokens = tokenizer.tokenize(tag_word)
 
-        prob = random.random() 
+        prob = random.random()
         if prob < args.get('tag_mask_ratio', 0.15) or (feat_mask[tag_index] != 0 and random.random() < args.get("tag_joint_mask_ratio", 0.5)):
 
             new_prob = random.random()
             if new_prob < 0.8:
-                for sub_token in sub_tokens:
-                    visual_tags_bert_words.append("[MASK]")
+                visual_tags_bert_words.extend("[MASK]" for _ in sub_tokens)
             elif new_prob < 0.9:
-                for sub_token in sub_tokens:
-                    visual_tags_bert_words.append(random.choice(list(tokenizer.vocab.keys())))
+                visual_tags_bert_words.extend(
+                    random.choice(list(tokenizer.vocab.keys()))
+                    for _ in sub_tokens
+                )
             else:
                 visual_tags_bert_words.extend(sub_tokens)
-            
+
             for sub_token in sub_tokens:
                 try:
                     visual_tags_mlm_labels.append(tokenizer.vocab[sub_token])
                 except KeyError:
                     # For unknown words (should not occur with BPE vocab)
                     visual_tags_mlm_labels.append(tokenizer.vocab["[UNK]"])
-                    logging.warning("Cannot find sub_token '{}' in vocab. Using [UNK] insetad".format(sub_token))
+                    logging.warning(
+                        f"Cannot find sub_token '{sub_token}' in vocab. Using [UNK] insetad"
+                    )
 
         else:
             for sub_token in sub_tokens:
@@ -130,7 +132,7 @@ def create_tags_pretrain(obj_labels, attr_labels, obj_confs, attr_confs, tokeniz
                 visual_tags_mlm_labels.append(-1)
 
         # duplicate box
-        for sub_token in sub_tokens:
+        for _ in sub_tokens:
             visual_tags_box_bert_input.append(visual_tags_box[tag_index])
             if args.get("use_segment_id_for_attr", False):
                 visual_tags_segment_ids.append(seg_id)
@@ -149,7 +151,7 @@ def create_tags(obj_labels, attr_labels, obj_confs, attr_confs, tokenizer, symbo
     visual_tags_box_bert_input = []
     #visual_tags_mlm_labels = []
     visual_tags_segment_ids = []
-    
+
     recorded_indexes = []
     counter = 0
     for tag_index, tag in enumerate(obj_labels_transformed):
@@ -168,7 +170,7 @@ def create_tags(obj_labels, attr_labels, obj_confs, attr_confs, tokenizer, symbo
             counter += 1
 
         # duplicate box
-        for sub_token in sub_tokens:
+        for _ in sub_tokens:
             visual_tags_box_bert_input.append(visual_tags_box[tag_index])
             if args.get("use_segment_id_for_attr", False):
                 visual_tags_segment_ids.append(seg_id)

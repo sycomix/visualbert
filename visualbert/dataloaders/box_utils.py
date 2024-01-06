@@ -57,7 +57,7 @@ def resize_image(image, desired_width=768, desired_height=384, random_pad=False)
     left_pad = random.randint(0, x_pad) if random_pad else x_pad // 2
 
     padding = (left_pad, top_pad, x_pad - left_pad, y_pad - top_pad)
-    assert all([x >= 0 for x in padding])
+    assert all(x >= 0 for x in padding)
     image = functional.pad(image, padding)
     window = [left_pad, top_pad, w + left_pad, h + top_pad]
 

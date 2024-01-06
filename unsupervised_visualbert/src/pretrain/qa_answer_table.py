@@ -98,26 +98,24 @@ def load_lxmert_qa(path, model, label2ans):
         {0: 'cat', 1: 'dog', ...}
     :return:
     """
-    print("Load QA pre-trained LXMERT from %s " % path)
-    loaded_state_dict = torch.load("%s_LXRT.pth" % path)
+    print(f"Load QA pre-trained LXMERT from {path} ")
+    loaded_state_dict = torch.load(f"{path}_LXRT.pth")
     model_state_dict = model.state_dict()
 
     # Handle Multi-GPU pre-training --> Single GPU fine-tuning
     for key in list(loaded_state_dict.keys()):
         loaded_state_dict[key.replace("module.", '')] = loaded_state_dict.pop(key)
 
-    # Isolate bert model
-    bert_state_dict = {}
-    for key, value in loaded_state_dict.items():
-        if key.startswith('bert.'):
-            bert_state_dict[key] = value
-
-    # Isolate answer head
-    answer_state_dict = {}
-    for key, value in loaded_state_dict.items():
-        if key.startswith("answer_head."):
-            answer_state_dict[key.replace('answer_head.', '')] = value
-
+    bert_state_dict = {
+        key: value
+        for key, value in loaded_state_dict.items()
+        if key.startswith('bert.')
+    }
+    answer_state_dict = {
+        key.replace('answer_head.', ''): value
+        for key, value in loaded_state_dict.items()
+        if key.startswith("answer_head.")
+    }
     # Do surgery on answer state dict
     ans_weight = answer_state_dict['logit_fc.3.weight']
     ans_bias = answer_state_dict['logit_fc.3.bias']
@@ -128,7 +126,7 @@ def load_lxmert_qa(path, model, label2ans):
     loaded = 0
     unload = 0
     if type(label2ans) is list:
-        label2ans = {label: ans for label, ans in enumerate(label2ans)}
+        label2ans = dict(enumerate(label2ans))
     for label, ans in label2ans.items():
         new_ans = answer_table.convert_ans(ans)
         if answer_table.used(new_ans):
@@ -173,8 +171,8 @@ def load_lxmert_from_pretrain_noqa(path, model):
         {0: 'cat', 1: 'dog', ...}
     :return:
     """
-    print("Load QA pre-trained LXMERT from %s " % path)
-    loaded_state_dict = torch.load("%s_LXRT.pth" % path)
+    print(f"Load QA pre-trained LXMERT from {path} ")
+    loaded_state_dict = torch.load(f"{path}_LXRT.pth")
     model_state_dict = model.state_dict()
 
     # Handle Multi-GPU pre-training --> Single GPU fine-tuning
@@ -189,13 +187,14 @@ def load_lxmert_from_pretrain_noqa(path, model):
 
     # Load Bert Weights
     load_state_dict_flexible(model.lxrt_encoder.model, loaded_state_dict)  #model.lxrt_encoder.model.load_state_dict(bert_state_dict, strict=False)
-    
+
     if model.lxrt_encoder.load_pretrain_head:
         print("\nLoad pre-trained head\n")
-        head_state_dict = {}
-        for key, value in loaded_state_dict.items():
-            if key.startswith('cls.'):
-                head_state_dict[key.replace("cls.", "")] = value
+        head_state_dict = {
+            key.replace("cls.", ""): value
+            for key, value in loaded_state_dict.items()
+            if key.startswith('cls.')
+        }
         load_state_dict_flexible(model.lxrt_encoder.pretrained_head, head_state_dict)
 
     '''# Load Answer Logic FC Weights
@@ -218,22 +217,19 @@ def load_lxmert_for_vcr_finetune_from_vcr_pretrain(path, model):
         {0: 'cat', 1: 'dog', ...}
     :return:
     """
-    print("Load QA pre-trained LXMERT from %s " % path)
-    loaded_state_dict = torch.load("%s_LXRT.pth" % path)
+    print(f"Load QA pre-trained LXMERT from {path} ")
+    loaded_state_dict = torch.load(f"{path}_LXRT.pth")
     model_state_dict = model.state_dict()
 
     # Handle Multi-GPU pre-training --> Single GPU fine-tuning
     for key in list(loaded_state_dict.keys()):
         loaded_state_dict[key.replace("model.module.", '')] = loaded_state_dict.pop(key)
 
-    # Isolate bert model
-    bert_state_dict = {}
-    for key, value in loaded_state_dict.items():
-        if key.startswith('bert.'):
-            bert_state_dict[key] = value
-    
-    
-
+    bert_state_dict = {
+        key: value
+        for key, value in loaded_state_dict.items()
+        if key.startswith('bert.')
+    }
     # Load Bert Weights
     bert_model_keys = set(model.lxrt_encoder.model.state_dict().keys())
     bert_loaded_keys = set(bert_state_dict.keys())
@@ -260,8 +256,8 @@ def load_lxmert_from_pretrain_vcr_pretrain(path, model):
         {0: 'cat', 1: 'dog', ...}
     :return:
     """
-    print("Load QA pre-trained LXMERT from %s " % path)
-    loaded_state_dict = torch.load("%s_LXRT.pth" % path)
+    print(f"Load QA pre-trained LXMERT from {path} ")
+    loaded_state_dict = torch.load(f"{path}_LXRT.pth")
     model_state_dict = model.state_dict()
 
     # Handle Multi-GPU pre-training --> Single GPU fine-tuning
@@ -290,33 +286,27 @@ def load_lxmert_from_sgg_and_lxmert_pretrain(path, model, label2ans):
         {0: 'cat', 1: 'dog', ...}
     :return:
     """
-    print("Load LXMERT pre-trained for sgg and lxmert pre-training from %s " % path)
+    print(f"Load LXMERT pre-trained for sgg and lxmert pre-training from {path} ")
     loaded_state_dict = torch.load(path)["model"]
     model_state_dict = model.state_dict()
 
-    # Handle Multi-GPU pre-training --> Single GPU fine-tuning
-    #for key in list(loaded_state_dict.keys()):
-    #    loaded_state_dict[key.replace("module.", '')] = loaded_state_dict.pop(key)
-    
-    new_loaded_state_dict = {}
-    for key in list(loaded_state_dict.keys()):
-        if "lxrt" in key:
-            new_loaded_state_dict[key.split("lxrt.")[-1]] = loaded_state_dict[key]
-
+    new_loaded_state_dict = {
+        key.split("lxrt.")[-1]: loaded_state_dict[key]
+        for key in list(loaded_state_dict.keys())
+        if "lxrt" in key
+    }
     loaded_state_dict = new_loaded_state_dict
 
-    # Isolate bert model
-    bert_state_dict = {}
-    for key, value in loaded_state_dict.items():
-        if key.startswith('bert.'):
-            bert_state_dict[key] = value
-
-    # Isolate answer head
-    answer_state_dict = {}
-    for key, value in loaded_state_dict.items():
-        if key.startswith("answer_head."):
-            answer_state_dict[key.replace('answer_head.', '')] = value
-
+    bert_state_dict = {
+        key: value
+        for key, value in loaded_state_dict.items()
+        if key.startswith('bert.')
+    }
+    answer_state_dict = {
+        key.replace('answer_head.', ''): value
+        for key, value in loaded_state_dict.items()
+        if key.startswith("answer_head.")
+    }
     # Do surgery on answer state dict
     ans_weight = answer_state_dict['logit_fc.3.weight']
     ans_bias = answer_state_dict['logit_fc.3.bias']
@@ -327,7 +317,7 @@ def load_lxmert_from_sgg_and_lxmert_pretrain(path, model, label2ans):
     loaded = 0
     unload = 0
     if type(label2ans) is list:
-        label2ans = {label: ans for label, ans in enumerate(label2ans)}
+        label2ans = dict(enumerate(label2ans))
     for label, ans in label2ans.items():
         new_ans = answer_table.convert_ans(ans)
         if answer_table.used(new_ans):
@@ -348,7 +338,7 @@ def load_lxmert_from_sgg_and_lxmert_pretrain(path, model, label2ans):
     bert_model_keys = set(model.lxrt_encoder.model.state_dict().keys())
     bert_loaded_keys = set(bert_state_dict.keys())
     #print(len(bert_model_keys - bert_loaded_keys))
-    
+
     assert len(bert_model_keys - bert_loaded_keys) == 0
     model.lxrt_encoder.model.load_state_dict(bert_state_dict, strict=False)
     #load_state_dict_flexible(model.lxrt_encoder.model, bert_state_dict)
@@ -370,13 +360,13 @@ def load_state_dict_flexible(model, state_dict):
 
     for name, param in state_dict.items():
         if name not in own_state:
-            print("Skipped: " + name)
+            print(f"Skipped: {name}")
             continue
         if isinstance(param, torch.nn.Parameter):
             # backwards compatibility for serialized parameters
             param = param.data
         try:
             own_state[name].copy_(param)
-            print("Successfully loaded: "+name)
+            print(f"Successfully loaded: {name}")
         except:
-            print("Part load failed: " + name)
+            print(f"Part load failed: {name}")

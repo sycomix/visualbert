@@ -34,8 +34,7 @@ class TrainingMeter():
             self.true_dict[key] += item
 
     def report(self):
-        keys = list(self.counter_dict.keys())
-        keys.sort()
+        keys = sorted(self.counter_dict.keys())
         for key in keys:
             print("  {} : {:.7}".format(key, self.true_dict[key] / self.counter_dict[key]))
     
@@ -60,7 +59,7 @@ def get_tuple(splits: str, bs: int, shuffle=False, drop_last=False, topk=-1, num
     # Note: visual7w is a part of vgqa, we take the name here.
     qa_sets = args.qa_sets
     if qa_sets is not None:
-        qa_sets = set(qa_set.lower().strip() for qa_set in qa_sets.split(","))
+        qa_sets = {qa_set.lower().strip() for qa_set in qa_sets.split(",")}
 
     # Build dataset, data loader, and evaluator.
     dset = LXMERTDataset(splits, qa_sets=qa_sets)
@@ -89,7 +88,7 @@ def get_tuple_hybrid(splits: str, bs: int, shuffle=False, drop_last=False, num_w
     # Note: visual7w is a part of vgqa, we take the name here.
     qa_sets = args.qa_sets
     if qa_sets is not None:
-        qa_sets = set(qa_set.lower().strip() for qa_set in qa_sets.split(","))
+        qa_sets = {qa_set.lower().strip() for qa_set in qa_sets.split(",")}
 
     # Three type of datasets: v&l, language, vision
     datasets_list_torch = []
@@ -104,25 +103,18 @@ def get_tuple_hybrid(splits: str, bs: int, shuffle=False, drop_last=False, num_w
     if text_only_splits is not None:
         text_only_datasets = []
         for split in text_only_splits.split("+"):
-            if not("book_corpus" in split or "sbu" in split):
-                text_only_dataset = LXMERTDataset(split, qa_sets=qa_sets)
-                text_only_dataset_torch = LXMERTTorchDataset(text_only_dataset, topk, text_only=True, limit_source=limit_source)
-                
-                datasets_list.append(text_only_dataset)
-                datasets_list_torch.append(text_only_dataset_torch)
-                text_only_datasets.append(text_only_dataset_torch)
-            else:
+            if "book_corpus" in split or "sbu" in split:
                 text_only_dataset = None
                 if "book_corpus" in split and args.get("text_shared_memory", False):
                     text_class = GeneralCorpusNP
-                else:
-                    #text_class = GeneralCorpus
-                    pass
                 text_only_dataset_torch = text_class(ann_file=args.book_corpus_path if "book_corpus" in split else args.sbu_path, pretrained_model_name="bert-base-uncased", tokenizer=None, seq_len=args.get("text_only_max_seq_len", 64), min_seq_len=args.get("text_only_min_seq_len", 64), encoding="utf-8", on_memory=True)
-                datasets_list.append(text_only_dataset)
-                datasets_list_torch.append(text_only_dataset_torch)
-                text_only_datasets.append(text_only_dataset_torch)
+            else:
+                text_only_dataset = LXMERTDataset(split, qa_sets=qa_sets)
+                text_only_dataset_torch = LXMERTTorchDataset(text_only_dataset, topk, text_only=True, limit_source=limit_source)
 
+            text_only_datasets.append(text_only_dataset_torch)
+            datasets_list_torch.append(text_only_dataset_torch)
+            datasets_list.append(text_only_dataset)
     if image_only_splits is not None:
         if image_only_splits != "":
             image_only_dataset = LXMERTDataset(image_only_splits, qa_sets=qa_sets)
@@ -135,7 +127,7 @@ def get_tuple_hybrid(splits: str, bs: int, shuffle=False, drop_last=False, num_w
             google_cc_dataset_torch = LXMERTTorchDataset(google_cc_dataset, topk, image_only=True, use_visual_tag_flag=args.get("use_visual_tag_flag", False), available_split_for_cc = args.get("available_split_for_cc", [0]))
             datasets_list.append(google_cc_dataset)
             datasets_list_torch.append(google_cc_dataset_torch)
-        
+
         if args.get("add_adhoc_open_image_image_only", False):
             open_image_dataset = LXMERTDataset("open_images_train", qa_sets=qa_sets)
             open_image_torch = LXMERTTorchDataset(open_image_dataset, topk, image_only=True, use_visual_tag_flag=args.get("use_visual_tag_flag", False))
@@ -147,7 +139,7 @@ def get_tuple_hybrid(splits: str, bs: int, shuffle=False, drop_last=False, num_w
 
     if args.task_qa:
         merged_dataset.answer_table = datasets_list[0].answer_table if datasets_list[0] is not None else None
-    
+
     batch_sampler = CustomBatchSampler(merged_dataset.datasets, bs, upsample_ratios=args.get("upsample_ratios", [1,1,1]))
     try:
         custom_collact_fn = datasets_list_torch[0].custom_collact_fn if args.get('custom_collact_fn', False) else lambda x: x
@@ -165,11 +157,7 @@ def get_tuple_hybrid(splits: str, bs: int, shuffle=False, drop_last=False, num_w
         evaluator = None
     print()
 
-    if splits is not None:
-        vl_torchdset = vl_dataset_torch
-    else:
-        vl_torchdset = datasets_list_torch[-1] # the last dataset
-
+    vl_torchdset = datasets_list_torch[-1] if splits is None else vl_dataset_torch
     return DataTuple(dataset=merged_dataset, torchdset=merged_dataset, loader=data_loader, evaluator=evaluator, vl_torchdset=vl_torchdset)
 
 if not args.get("hybrid", False):
@@ -294,7 +282,7 @@ class LXMERT:
         print("Total Iters: %d" % t_total)
         if args.get("t_total", None):
             t_total = args.t_total
-            print("!! Changing to specified t_toal in args: {}".format(t_total))
+            print(f"!! Changing to specified t_toal in args: {t_total}")
         self.t_total = t_total
         warmup_iters = int(t_total * warmup_ratio)
 
@@ -311,7 +299,7 @@ class LXMERT:
         report_every = args.get("report_every", 100)
 
         custom_train_meter = TrainingMeter()
-        
+
         for epoch in range(args.epochs):
             # Train
             self.model.train()
@@ -338,26 +326,28 @@ class LXMERT:
                         uid = datum.uid
                         ans = train_tuple.dataset.answer_table.id2ans(l)
                         uid2ans[uid] = ans
-                
+
                 for key, value in losses_dict.items():
                     losses_dict[key] = value.mean().item()  # make the losses scalar
-                
+
                 if "Masked LM" in losses_dict and losses_dict["Masked LM"] == 0:
                     del losses_dict["Masked LM"]
 
                 custom_train_meter.update(losses_dict)
 
                 if batch_id % report_every == 0 and batch_id > 0:
-                    print("Folder: {} \n Epoch {} Iter: {}/{}".format(args.output, epoch, batch_id, len(train_ld)))
+                    print(
+                        f"Folder: {args.output} \n Epoch {epoch} Iter: {batch_id}/{len(train_ld)}"
+                    )
                     #print(pd.DataFrame(train_results[-report_every:]).mean())
                     custom_train_meter.report()
                     custom_train_meter.clean()
                     print()
-                
+
                 if args.get("save_step", -1) != -1 and self.global_step != 0 and (self.global_step // gradient_accumulation_steps) % args.save_step == 0:
-                    self.save("Step{}".format(self.global_step))
+                    self.save(f"Step{self.global_step}")
                 self.global_step += 1
-            
+
             print("The training loss for Epoch %d is %0.4f" % (epoch, total_loss / batch_per_epoch))
 
             if args.task_qa:
@@ -441,24 +431,27 @@ class LXMERT:
         return total_loss / len(eval_ld)
 
     def save(self, name):
-        torch.save(self.model.state_dict(),
-                   os.path.join(args.output, "%s_LXRT.pth" % name))
-        
+        torch.save(
+            self.model.state_dict(), os.path.join(args.output, f"{name}_LXRT.pth")
+        )
+
         if args.get("save_optimizer", False) and "Step" not in name:
-            torch.save(self.optim.state_dict(),
-                   os.path.join(args.output, "%s_LXRT_optimizer.pth" % name))
+            torch.save(
+                self.optim.state_dict(),
+                os.path.join(args.output, f"{name}_LXRT_optimizer.pth"),
+            )
         
 
     def load(self, path, t_total):
-        print("Load model from %s" % path)
-        state_dict = torch.load("%s_LXRT.pth" % path)
+        print(f"Load model from {path}")
+        state_dict = torch.load(f"{path}_LXRT.pth")
         #self.model.load_state_dict(state_dict)
         from qa_answer_table import load_state_dict_flexible
         load_state_dict_flexible(self.model, state_dict)
 
-        optimizer_path = "{}_LXRT_optimizer.pth".format(path)
+        optimizer_path = f"{path}_LXRT_optimizer.pth"
         if os.path.exists(optimizer_path) and args.get("load_optimizer", True):
-            print("Load optimizer from {}".format(optimizer_path))
+            print(f"Load optimizer from {optimizer_path}")
 
             loaded_optim = torch.load(optimizer_path)
             if args.get("reset_schedule", False):
@@ -474,19 +467,19 @@ class LXMERT:
     
 
     def load_lxmert(self, path):
-        print("Load LXMERT model from %s" % path)
-        state_dict = torch.load("%s_LXRT.pth" % path)
+        print(f"Load LXMERT model from {path}")
+        state_dict = torch.load(f"{path}_LXRT.pth")
 
         # Do not load any answer head
         for key in list(state_dict.keys()):
             if 'answer' in key:
                 state_dict.pop(key)
 
-        # Change Multi GPU to single GPU
-        new_state_dict = {}
-        for key, value in state_dict.items():
-            if key.startswith("module."):
-                new_state_dict[key[len("module."):]] = value
+        new_state_dict = {
+            key[len("module.") :]: value
+            for key, value in state_dict.items()
+            if key.startswith("module.")
+        }
         state_dict = new_state_dict
 
         load_keys = set(state_dict.keys())

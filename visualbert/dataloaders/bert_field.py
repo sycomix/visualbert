@@ -30,8 +30,9 @@ class BertField(SequenceField[Dict[str, torch.Tensor]]):
         self.padding_value = padding_value
 
         if len(self.tokens) != self.embs.shape[0]:
-            raise ValueError("The tokens you passed into the BERTField, {} "
-                             "aren't the same size as the embeddings of shape {}".format(self.tokens, self.embs.shape))
+            raise ValueError(
+                f"The tokens you passed into the BERTField, {self.tokens} aren't the same size as the embeddings of shape {self.embs.shape}"
+            )
         assert len(self.tokens) == self.embs.shape[0]
 
     @overrides
@@ -87,13 +88,16 @@ class IntArrayField(Field[numpy.ndarray]):
 
     @overrides
     def get_padding_lengths(self) -> Dict[str, int]:
-        return {"dimension_" + str(i): shape
-                for i, shape in enumerate(self.array.shape)}
+        return {
+            f"dimension_{str(i)}": shape
+            for i, shape in enumerate(self.array.shape)
+        }
 
     @overrides
     def as_tensor(self, padding_lengths: Dict[str, int]) -> torch.Tensor:
-        max_shape = [padding_lengths["dimension_{}".format(i)]
-                     for i in range(len(padding_lengths))]
+        max_shape = [
+            padding_lengths[f"dimension_{i}"] for i in range(len(padding_lengths))
+        ]
 
         # Convert explicitly to an ndarray just in case it's an scalar (it'd end up not being an ndarray otherwise)
         return_array = numpy.asarray(numpy.ones(max_shape, "int64") * self.padding_value)
@@ -102,11 +106,10 @@ class IntArrayField(Field[numpy.ndarray]):
         # form the right shaped list of slices for insertion into the final tensor.
         slicing_shape = list(self.array.shape)
         if len(self.array.shape) < len(max_shape):
-            slicing_shape = slicing_shape + [0 for _ in range(len(max_shape) - len(self.array.shape))]
-        slices = tuple([slice(0, x) for x in slicing_shape])
+            slicing_shape += [0 for _ in range(len(max_shape) - len(self.array.shape))]
+        slices = tuple(slice(0, x) for x in slicing_shape)
         return_array[slices] = self.array
-        tensor = torch.from_numpy(return_array)
-        return tensor
+        return torch.from_numpy(return_array)
 
     @overrides
     def empty_field(self):  # pylint: disable=no-self-use
@@ -134,13 +137,16 @@ class IntArrayTensorField(Field[numpy.ndarray]):
 
     @overrides
     def get_padding_lengths(self) -> Dict[str, int]:
-        return {"dimension_" + str(i): shape
-                for i, shape in enumerate(self.array.size())}
+        return {
+            f"dimension_{str(i)}": shape
+            for i, shape in enumerate(self.array.size())
+        }
 
     @overrides
     def as_tensor(self, padding_lengths: Dict[str, int]) -> torch.Tensor:
-        max_shape = [padding_lengths["dimension_{}".format(i)]
-                     for i in range(len(padding_lengths))]
+        max_shape = [
+            padding_lengths[f"dimension_{i}"] for i in range(len(padding_lengths))
+        ]
 
         # Convert explicitly to an ndarray just in case it's an scalar (it'd end up not being an ndarray otherwise)
         return_array = torch.ones(max_shape, dtype = torch.int64) * self.padding_value
@@ -149,8 +155,8 @@ class IntArrayTensorField(Field[numpy.ndarray]):
         # form the right shaped list of slices for insertion into the final tensor.
         slicing_shape = list(self.array.size())
         if len(self.array.size()) < len(max_shape):
-            slicing_shape = slicing_shape + [0 for _ in range(len(max_shape) - len(self.array.size()))]
-        slices = tuple([slice(0, x) for x in slicing_shape])
+            slicing_shape += [0 for _ in range(len(max_shape) - len(self.array.size()))]
+        slices = tuple(slice(0, x) for x in slicing_shape)
         return_array[slices] = self.array
         return return_array
 
@@ -170,13 +176,16 @@ class ArrayTensorField(Field[numpy.ndarray]):
 
     @overrides
     def get_padding_lengths(self) -> Dict[str, int]:
-        return {"dimension_" + str(i): shape
-                for i, shape in enumerate(self.array.size())}
+        return {
+            f"dimension_{str(i)}": shape
+            for i, shape in enumerate(self.array.size())
+        }
 
     @overrides
     def as_tensor(self, padding_lengths: Dict[str, int]) -> torch.Tensor:
-        max_shape = [padding_lengths["dimension_{}".format(i)]
-                     for i in range(len(padding_lengths))]
+        max_shape = [
+            padding_lengths[f"dimension_{i}"] for i in range(len(padding_lengths))
+        ]
 
         # Convert explicitly to an ndarray just in case it's an scalar (it'd end up not being an ndarray otherwise)
         return_array = torch.ones(max_shape, dtype = torch.float) * self.padding_value
@@ -185,8 +194,8 @@ class ArrayTensorField(Field[numpy.ndarray]):
         # form the right shaped list of slices for insertion into the final tensor.
         slicing_shape = list(self.array.size())
         if len(self.array.size()) < len(max_shape):
-            slicing_shape = slicing_shape + [0 for _ in range(len(max_shape) - len(self.array.size()))]
-        slices = tuple([slice(0, x) for x in slicing_shape])
+            slicing_shape += [0 for _ in range(len(max_shape) - len(self.array.size()))]
+        slices = tuple(slice(0, x) for x in slicing_shape)
         return_array[slices] = self.array
         return return_array
 

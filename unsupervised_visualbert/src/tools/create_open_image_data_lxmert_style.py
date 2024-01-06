@@ -9,25 +9,16 @@ for root, dirs, files in os.walk(target, topdown=False):
     for txt_file in files:
         if txt_file.endswith("txt"):
             with open(os.path.join(target, txt_file)) as f:
-              lines = f.read().split("\n")
-              for line in lines:
-                if len(line) != 0:
-                  all_image_files.append(line)
-
-
-
+                lines = f.read().split("\n")
+                all_image_files.extend(line for line in lines if len(line) != 0)
 train_file_name = "/local/harold/ubert/lxmert/data/lxmert/open_images_train.json" #.format("open_images_train" if "train" in target else "open_images_valid")
 train_data = []
 
-for i in range(len(all_image_files)):
+for all_image_file in all_image_files:
     #caption, url = lines[i].strip('\n').split("\t", 1)
 
-    one_datatum = {}
-    one_datatum["img_id"] = all_image_files[i] #"{}/{}.jpg".format(target, i)
-    one_datatum["labelf"] = {}
-    one_datatum["sentf"] = {}
-    one_datatum["sentf"]["open_image"] = []
-    one_datatum["sentf"]["open_image"].append("")
+    one_datatum = {"img_id": all_image_file, "labelf": {}, "sentf": {}}
+    one_datatum["sentf"]["open_image"] = [""]
     train_data.append(one_datatum)
 
 with open(train_file_name, 'w') as f:

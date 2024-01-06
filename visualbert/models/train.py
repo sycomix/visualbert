@@ -1,6 +1,7 @@
 """
 Training script. Should be pretty adaptable to whatever.
 """
+
 import argparse
 import os
 import shutil
@@ -97,10 +98,10 @@ else:
 import sys
 run_log_counter = 0
 
-while(os.path.exists(args.folder + '/run_{}.log'.format(run_log_counter))):
+while os.path.exists(args.folder + f'/run_{run_log_counter}.log'):
     run_log_counter += 1
 
-file_log = open(args.folder + '/run_{}.log'.format(run_log_counter),'w')  # File where you need to keep the logs
+file_log = open(args.folder + f'/run_{run_log_counter}.log', 'w')
 file_log.write("")
 class Unbuffered:
     def __init__(self, stream):
@@ -221,10 +222,10 @@ param_shapes = print_para(train_model.model)
 
 print(args)
 
-print("########### Starting from {}".format(start_epoch))
+print(f"########### Starting from {start_epoch}")
 
 num_batches = 0
-    
+
 stop_epoch = args.num_train_epochs
 
 save_every = args.get("save_every", None)
@@ -237,7 +238,7 @@ for epoch_num in range(start_epoch, stop_epoch):
         for b, (time_per_batch, batch) in enumerate(time_batch(tqdm(train_loader), reset_every=ARGS_RESET_EVERY)):
 
             batch = _to_gpu(batch)
-            
+
             output_dict = train_model.step(batch)
 
             num_batches += 1
@@ -289,32 +290,30 @@ for epoch_num in range(start_epoch, stop_epoch):
             val_dataset = val_loader.dataset
         vcr_save_result = args.get("vcr_save_result", False) # This one is for vcr
 
-        for b, (time_per_batch, batch) in enumerate(time_batch(val_loader if args.no_tqdm else tqdm(val_loader), reset_every=ARGS_RESET_EVERY)):
+        for time_per_batch, batch in time_batch(val_loader if args.no_tqdm else tqdm(val_loader), reset_every=ARGS_RESET_EVERY):
             with torch.no_grad():
                 batch = _to_gpu(batch)
                 output_dict = train_model.step(batch, eval_mode = True)
 
-                if not args.pretraining:
-                    # Pretty clumsy code
-                    if args.model.training_head_type == "vqa":
-                        val_probs.append(output_dict['logits'].detach().cpu())
-                        if not do_test:
-                            val_labels.append(batch['label'].detach().cpu())
-                    elif args.model.training_head_type == "flickr":
-                        # This is because of multi-GPU
-                        val_acc += (output_dict["accuracy"] * output_dict["entity_num"].float()).sum(-1).item()
-                        val_acc_upper += (output_dict["upperbound_accuracy"] * output_dict["entity_num"].float()).sum(-1).item()
-                        val_instance_counter += output_dict["entity_num"].sum(-1).item()
+                if args.pretraining:
+                    val_labels.append(batch['label'].detach().cpu().numpy())
 
-                    elif args.model.training_head_type == "multichoice":
-                        val_probs.append(output_dict['logits'].detach().cpu().numpy())
-                        if not do_test:
-                            val_labels.append(batch['label'].detach().cpu().numpy())
-                    elif args.model.training_head_type == "nlvr":
-                        val_probs.append(output_dict['logits'].detach().cpu().numpy())
+                elif args.model.training_head_type == "vqa":
+                    val_probs.append(output_dict['logits'].detach().cpu())
+                    if not do_test:
+                        val_labels.append(batch['label'].detach().cpu())
+                elif args.model.training_head_type == "flickr":
+                    # This is because of multi-GPU
+                    val_acc += (output_dict["accuracy"] * output_dict["entity_num"].float()).sum(-1).item()
+                    val_acc_upper += (output_dict["upperbound_accuracy"] * output_dict["entity_num"].float()).sum(-1).item()
+                    val_instance_counter += output_dict["entity_num"].sum(-1).item()
+
+                elif args.model.training_head_type == "multichoice":
+                    val_probs.append(output_dict['logits'].detach().cpu().numpy())
+                    if not do_test:
                         val_labels.append(batch['label'].detach().cpu().numpy())
-
-                else:
+                elif args.model.training_head_type == "nlvr":
+                    val_probs.append(output_dict['logits'].detach().cpu().numpy())
                     val_labels.append(batch['label'].detach().cpu().numpy())
 
                 if not do_test:
@@ -350,21 +349,17 @@ for epoch_num in range(start_epoch, stop_epoch):
                     val_labels = np.concatenate(val_labels, 0)
                 val_probs = np.concatenate(val_probs, 0)
                 if vcr_save_result:
-                    if do_test:
-                        file_name = "test"
-                    else:
-                        file_name = "val"
-
-                    save_file_name = os.path.join(args.folder, file_name + "_qa.np")
+                    file_name = "test" if do_test else "val"
+                    save_file_name = os.path.join(args.folder, f"{file_name}_qa.np")
                     if args.rationale:
-                        save_file_name = os.path.join(args.folder, file_name + "_qar.np")
+                        save_file_name = os.path.join(args.folder, f"{file_name}_qar.np")
                     if do_test:
                         np.save(save_file_name, val_probs)
                     else:
                         np.savez(save_file_name+'z', val_probs=val_probs, val_labels=val_labels)
 
                         #np.save(save_file_name, (val_probs, val_labels))
-                    print("Saved result to {}".format(save_file_name))
+                    print(f"Saved result to {save_file_name}")
                     assert(0)
 
                 acc = float(np.mean(val_labels == val_probs.argmax(1)))
@@ -394,7 +389,7 @@ for epoch_num in range(start_epoch, stop_epoch):
             val_next_sentence_loss_avg = val_next_sentence_loss_sum / val_counter
             print("Val epoch {} has loss {:.5f}, next sentence loss {:.5f}".format(epoch_num, val_loss_avg, val_next_sentence_loss_avg), flush=True)
             val_metric_per_epoch.append(-val_loss_avg)
-        
+
         if int(np.argmax(val_metric_per_epoch)) < (len(val_metric_per_epoch) - 1 - args.patience):
             print("Stopping at epoch {:2d}".format(epoch_num))
             break

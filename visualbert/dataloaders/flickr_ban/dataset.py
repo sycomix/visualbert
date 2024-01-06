@@ -36,19 +36,16 @@ def is_howmany(q, a, label2ans):
        ('number of' in q.lower() and 'number of the' not in q.lower()) or \
        'amount of' in q.lower() or \
        'count of' in q.lower():
-        if a is None or answer_filter(a, label2ans):
-            return True
-        else:
-            return False
+        return bool(a is None or answer_filter(a, label2ans))
     else:
         return False
 
 
 def answer_filter(answers, label2ans, max_num=10):
-    for ans in answers['labels']:
-        if label2ans[ans].isdigit() and max_num >= int(label2ans[ans]):
-            return True
-    return False
+    return any(
+        label2ans[ans].isdigit() and max_num >= int(label2ans[ans])
+        for ans in answers['labels']
+    )
 
 
 class Dictionary(object):
@@ -74,24 +71,20 @@ class Dictionary(object):
         words = sentence.split()
         tokens = []
         if add_word:
-            for w in words:
-                tokens.append(self.add_word(w))
+            tokens.extend(self.add_word(w) for w in words)
         else:
-            for w in words:
-                # the least frequent word (`bebe`) as UNK for Visual Genome dataset
-                tokens.append(self.word2idx.get(w, self.padding_idx-1))
+            tokens.extend(self.word2idx.get(w, self.padding_idx-1) for w in words)
         return tokens
 
     def dump_to_file(self, path):
         cPickle.dump([self.word2idx, self.idx2word], open(path, 'wb'))
-        print('dictionary dumped to %s' % path)
+        print(f'dictionary dumped to {path}')
 
     @classmethod
     def load_from_file(cls, path):
-        print('loading dictionary from %s' % path)
+        print(f'loading dictionary from {path}')
         word2idx, idx2word = cPickle.load(open(path, 'rb'))
-        d = cls(word2idx, idx2word)
-        return d
+        return cls(word2idx, idx2word)
 
     def add_word(self, word):
         if word not in self.word2idx:
@@ -104,16 +97,16 @@ class Dictionary(object):
 
 
 def _create_entry(img, question, answer):
-    if None!=answer:
+    if answer != None:
         answer.pop('image_id')
         answer.pop('question_id')
-    entry = {
-        'question_id' : question['question_id'],
-        'image_id'    : question['image_id'],
-        'image'       : img,
-        'question'    : question['question'],
-        'answer'      : answer}
-    return entry
+    return {
+        'question_id': question['question_id'],
+        'image_id': question['image_id'],
+        'image': img,
+        'question': question['question'],
+        'answer': answer,
+    }
 
 
 def _load_dataset(dataroot, name, img_id2val, label2ans):
@@ -124,17 +117,18 @@ def _load_dataset(dataroot, name, img_id2val, label2ans):
     name: 'train', 'val', 'test-dev2015', test2015'
     """
     question_path = os.path.join(
-        dataroot, 'v2_OpenEnded_mscoco_%s_questions.json' % \
-        (name + '2014' if 'test'!=name[:4] else name))
+        dataroot,
+        f"v2_OpenEnded_mscoco_{f'{name}2014' if name[:4] != 'test' else name}_questions.json",
+    )
     questions = sorted(json.load(open(question_path))['questions'],
                        key=lambda x: x['question_id'])
-    if 'test'!=name[:4]: # train, val
-        answer_path = os.path.join(dataroot, 'cache', '%s_target.pkl' % name)
+    entries = []
+    if name[:4] != 'test': # train, val
+        answer_path = os.path.join(dataroot, 'cache', f'{name}_target.pkl')
         answers = cPickle.load(open(answer_path, 'rb'))
         answers = sorted(answers, key=lambda x: x['question_id'])
 
         utils.assert_eq(len(questions), len(answers))
-        entries = []
         for question, answer in zip(questions, answers):
             utils.assert_eq(question['question_id'], answer['question_id'])
             utils.assert_eq(question['image_id'], answer['image_id'])
@@ -142,7 +136,6 @@ def _load_dataset(dataroot, name, img_id2val, label2ans):
             if not COUNTING_ONLY or is_howmany(question['question'], answer, label2ans):
                 entries.append(_create_entry(img_id2val[img_id], question, answer))
     else: # test2015
-        entries = []
         for question in questions:
             img_id = question['image_id']
             if not COUNTING_ONLY or is_howmany(question['question'], None, None):
@@ -161,7 +154,11 @@ def _load_visualgenome(dataroot, name, img_id2val, label2ans, adaptive=True):
     question_path = os.path.join(dataroot, 'question_answers.json')
     image_data_path = os.path.join(dataroot, 'image_data.json')
     ans2label_path = os.path.join(dataroot, 'cache', 'trainval_ans2label.pkl')
-    cache_path = os.path.join(dataroot, 'cache', 'vg_%s%s_target.pkl' % (name, '_adaptive' if adaptive else ''))
+    cache_path = os.path.join(
+        dataroot,
+        'cache',
+        f"vg_{name}{'_adaptive' if adaptive else ''}_target.pkl",
+    )
 
     if os.path.isfile(cache_path):
         entries = cPickle.load(open(cache_path, 'rb'))
@@ -170,23 +167,20 @@ def _load_visualgenome(dataroot, name, img_id2val, label2ans, adaptive=True):
         ans2label = cPickle.load(open(ans2label_path, 'rb'))
         vgq = json.load(open(question_path, 'r'))
         _vgv = json.load(open(image_data_path, 'r')) #108,077
-        vgv = {}
-        for _v in _vgv: 
-            if None != _v['coco_id']:
-                vgv[_v['id']] = _v['coco_id']
+        vgv = {_v['id']: _v['coco_id'] for _v in _vgv if _v['coco_id'] != None}
         counts = [0, 0, 0, 0] # used image, used question, total question, out-of-split
         for vg in vgq:
             coco_id = vgv.get(vg['id'], None)
-            if None != coco_id:
+            if coco_id != None:
                 counts[0] += 1
                 img_idx = img_id2val.get(coco_id, None)
-                if None == img_idx:
+                if img_idx is None:
                     counts[3] += 1
                 for q in vg['qas']:
                     counts[2] += 1
                     _answer = tools.compute_softscore.preprocess_answer(q['answer'])
                     label = ans2label.get(_answer, None)
-                    if None != label and None != img_idx:
+                    if label != None != img_idx:
                         counts[1] += 1
                         answer = {
                             'labels': [label],
@@ -200,7 +194,7 @@ def _load_visualgenome(dataroot, name, img_id2val, label2ans, adaptive=True):
                         if not COUNTING_ONLY or is_howmany(q['question'], answer, label2ans):
                             entries.append(entry)
 
-        print('Loading VisualGenome %s' % name)
+        print(f'Loading VisualGenome {name}')
         print('\tUsed COCO images: %d/%d (%.4f)' % \
             (counts[0], len(_vgv), counts[0]/len(_vgv)))
         print('\tOut-of-split COCO images: %d/%d (%.4f)' % \
@@ -214,10 +208,7 @@ def _load_visualgenome(dataroot, name, img_id2val, label2ans, adaptive=True):
 
 
 def _find_coco_id(vgv, vgv_id):
-    for v in vgv:
-        if v['id']==vgv_id:
-            return v['coco_id']
-    return None
+    return next((v['coco_id'] for v in vgv if v['id']==vgv_id), None)
 
 
 def _load_flickr30k(dataroot, img_id2idx, bbox, pos_boxes, limit = None, cache_name = None):
@@ -227,21 +218,21 @@ def _load_flickr30k(dataroot, img_id2idx, bbox, pos_boxes, limit = None, cache_n
     dataroot: root path of dataset
     name: 'train', 'val', 'test-dev2015', test2015'
     """
-    pattern_phrase = r'\[(.*?)\]'
-    pattern_no = r'\/EN\#(\d+)'
-
-    missing_entity_count = dict()
-    multibox_entity_count = 0
-
     entries = []
 
-    counter = 0
-
-    cache_name = os.path.join(dataroot, "{}.cache".format(cache_name))
+    cache_name = os.path.join(dataroot, f"{cache_name}.cache")
     if os.path.exists(cache_name):
         with open(cache_name, "rb") as f:
             entries = pickle.load(f)
     else:
+        pattern_phrase = r'\[(.*?)\]'
+        pattern_no = r'\/EN\#(\d+)'
+
+        missing_entity_count = dict()
+        multibox_entity_count = 0
+
+        counter = 0
+
         for image_id, idx in tqdm(img_id2idx.items()):
             if limit is not None and counter == limit:
                 break
@@ -261,18 +252,21 @@ def _load_flickr30k(dataroot, img_id2idx, bbox, pos_boxes, limit = None, cache_n
             target_bboxes = {}
 
             for elem in obj_elems:
-                if elem.find('bndbox') == None or len(elem.find('bndbox')) == 0:
+                if (
+                    elem.find('bndbox') is None
+                    or len(elem.find('bndbox')) == 0
+                ):
                     continue
                 left = int(elem.findtext('./bndbox/xmin'))
                 top = int(elem.findtext('./bndbox/ymin'))
                 right = int(elem.findtext('./bndbox/xmax'))
                 bottom = int(elem.findtext('./bndbox/ymax'))
-                assert 0 < left and 0 < top
+                assert left > 0 and top > 0
 
                 for name in elem.findall('name'):
                     entity_id = int(name.text)
                     assert 0 < entity_id
-                    if not entity_id in target_bboxes:
+                    if entity_id not in target_bboxes:
                         target_bboxes[entity_id] = []
                     else:
                         multibox_entity_count += 1
@@ -296,7 +290,7 @@ def _load_flickr30k(dataroot, img_id2idx, bbox, pos_boxes, limit = None, cache_n
                     entity_idx = utils.find_sublist(sentence.split(' '), phrase.split(' '))
                     #assert 0 <= entity_idx
 
-                    if not entity_id in target_bboxes:
+                    if entity_id not in target_bboxes:
                         if entity_id >= 0:
                             missing_entity_count[entity_type[0]] = missing_entity_count.get(entity_type[0], 0) + 1
                         continue
@@ -310,13 +304,13 @@ def _load_flickr30k(dataroot, img_id2idx, bbox, pos_boxes, limit = None, cache_n
                     entity_indices.append(entity_idx)
                     target_indices.append(target_idx)
 
-                if 0 == len(entity_ids):
+                if not entity_ids:
                     continue
 
                 entries.append(
                     _create_flickr_entry(idx, sentence, entity_indices, target_indices, entity_ids, entity_types))
 
-        if 0 < len(missing_entity_count.keys()):
+        if len(missing_entity_count.keys()) > 0:
             print('missing_entity_count=')
             print(missing_entity_count)
             print('multibox_entity_count=%d' % multibox_entity_count)
@@ -333,21 +327,21 @@ def _load_flickr30k_full_entity(dataroot, img_id2idx, bbox, pos_boxes, limit = N
     dataroot: root path of dataset
     name: 'train', 'val', 'test-dev2015', test2015'
     """
-    pattern_phrase = r'\[(.*?)\]'
-    pattern_no = r'\/EN\#(\d+)'
-
-    missing_entity_count = dict()
-    multibox_entity_count = 0
-
     entries = []
 
-    counter = 0
-
-    cache_name = os.path.join(dataroot, "{}.cache".format(cache_name))
+    cache_name = os.path.join(dataroot, f"{cache_name}.cache")
     if os.path.exists(cache_name):
         with open(cache_name, "rb") as f:
             entries = pickle.load(f)
     else:
+        pattern_phrase = r'\[(.*?)\]'
+        pattern_no = r'\/EN\#(\d+)'
+
+        missing_entity_count = dict()
+        multibox_entity_count = 0
+
+        counter = 0
+
         for image_id, idx in tqdm(img_id2idx.items()):
             if limit is not None and counter == limit:
                 break
@@ -367,18 +361,21 @@ def _load_flickr30k_full_entity(dataroot, img_id2idx, bbox, pos_boxes, limit = N
             target_bboxes = {}
 
             for elem in obj_elems:
-                if elem.find('bndbox') == None or len(elem.find('bndbox')) == 0:
+                if (
+                    elem.find('bndbox') is None
+                    or len(elem.find('bndbox')) == 0
+                ):
                     continue
                 left = int(elem.findtext('./bndbox/xmin'))
                 top = int(elem.findtext('./bndbox/ymin'))
                 right = int(elem.findtext('./bndbox/xmax'))
                 bottom = int(elem.findtext('./bndbox/ymax'))
-                assert 0 < left and 0 < top
+                assert left > 0 and top > 0
 
                 for name in elem.findall('name'):
                     entity_id = int(name.text)
                     assert 0 < entity_id
-                    if not entity_id in target_bboxes:
+                    if entity_id not in target_bboxes:
                         target_bboxes[entity_id] = []
                     else:
                         multibox_entity_count += 1
@@ -403,7 +400,7 @@ def _load_flickr30k_full_entity(dataroot, img_id2idx, bbox, pos_boxes, limit = N
                     entity_idx = utils.find_sublist_full(sentence.split(' '), phrase.split(' '))
                     #assert 0 <= entity_idx
 
-                    if not entity_id in target_bboxes:
+                    if entity_id not in target_bboxes:
                         if entity_id >= 0:
                             missing_entity_count[entity_type[0]] = missing_entity_count.get(entity_type[0], 0) + 1
                         continue
@@ -418,13 +415,13 @@ def _load_flickr30k_full_entity(dataroot, img_id2idx, bbox, pos_boxes, limit = N
                     target_indices.append(target_idx)
                     original_target.append(target_bboxes[entity_id])
 
-                if 0 == len(entity_ids):
+                if not entity_ids:
                     continue
 
                 entries.append(
                     _create_flickr_entry(idx, sentence, entity_indices, target_indices, entity_ids, entity_types, original_target = original_target))
 
-        if 0 < len(missing_entity_count.keys()):
+        if len(missing_entity_count.keys()) > 0:
             print('missing_entity_count=')
             print(missing_entity_count)
             print('multibox_entity_count=%d' % multibox_entity_count)

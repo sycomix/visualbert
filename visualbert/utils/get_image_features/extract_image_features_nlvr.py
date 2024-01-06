@@ -258,9 +258,8 @@ def recurse_find_image(folder, image_list, image_ext):
         path = os.path.join(folder, i)
         if os.path.isdir(path):
             recurse_find_image(path, image_list, image_ext)
-        else:
-            if path.endswith(image_ext):
-                image_list.append(path)
+        elif path.endswith(image_ext):
+            image_list.append(path)
 
 
 def main(args):
@@ -274,18 +273,16 @@ def main(args):
 
     im_list = []
     recurse_find_image(args.im_or_folder, im_list, args.image_ext)
-    print("There are {} images to cache in total.".format(len(im_list)))
+    print(f"There are {len(im_list)} images to cache in total.")
 
     if args.total_split != 1:
         im_lists = np.array_split(im_list, args.total_split)
         im_list= im_lists[args.current_split]
-        print("Split {}: There are currently {} images to cache.".format(args.current_split ,len(im_list)))
+        print(
+            f"Split {args.current_split}: There are currently {len(im_list)} images to cache."
+        )
 
-    # extract bboxes from bottom-up attention model
-    image_bboxes={}
-    if args.bbox_file is not None:
-        image_bboxes = extract_bboxes(args.bbox_file)
-
+    image_bboxes = {} if args.bbox_file is None else extract_bboxes(args.bbox_file)
     count = 0
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
@@ -296,7 +293,7 @@ def main(args):
 
     if args.existing is not None:
         giant_file = torch.load(args.existing)
-        print("Loaded {}".format(args.existing))
+        print(f"Loaded {args.existing}")
 
     for i, im_name in enumerate(tqdm(im_list)):
         im_base_name = os.path.basename(im_name)
@@ -305,15 +302,15 @@ def main(args):
         else:
             image_id = None
 
-        bbox = None
         if args.existing:
             if im_base_name in giant_file:
                 continue
             else:
-                print("Missing {}...".format(im_base_name))
+                print(f"Missing {im_base_name}...")
         im = cv2.imread(im_name)
         if im is not None:
-            outfile = os.path.join(args.output_dir, im_base_name) + ".npz"
+            outfile = f"{os.path.join(args.output_dir, im_base_name)}.npz"
+            bbox = None
             #lock_folder = outfile + '.lock'
             #if not os.path.exists(lock_folder) and os.path.exists(outfile):
             #    print("Reading {} falied!".format(im_base_name))
@@ -332,9 +329,9 @@ def main(args):
                 giant_file[im_base_name] = (box_features, cls_boxes, max_conf)
             else:
                 np.savez(outfile, box_features=box_features, max_conf=max_conf, cls_boxes=cls_boxes)
-            #os.rmdir(lock_folder)
+                    #os.rmdir(lock_folder)
         else:
-            print("Reading {} falied!".format(im_base_name))
+            print(f"Reading {im_base_name} falied!")
 
     if one_giant_file is not None:
         print(len(giant_file))

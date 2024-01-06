@@ -46,7 +46,7 @@ class NLVRDataset(Dataset):
         self.split = args.split
         self.text_only = args.get("text_only", False)
         self.no_next_sentence = args.get("no_next_sentence", False)
-        
+
         with open(self.annots_path, 'r') as f:
             self.items = [json.loads(s) for s in f]
 
@@ -59,13 +59,18 @@ class NLVRDataset(Dataset):
             for image_id in self.chunk.keys():
                 image_feat_variable, image_boxes, confidence  = self.chunk[image_id]
                 if "npz" not in image_id:
-                    new_chunk[image_id+".npz"] = screen_feature(image_feat_variable, image_boxes,confidence, self.image_screening_parameters)
-                    average += new_chunk[image_id+".npz"][2]
+                    new_chunk[f"{image_id}.npz"] = screen_feature(
+                        image_feat_variable,
+                        image_boxes,
+                        confidence,
+                        self.image_screening_parameters,
+                    )
+                    average += new_chunk[f"{image_id}.npz"][2]
                 else:
                     new_chunk[image_id] = screen_feature(image_feat_variable, image_boxes,confidence, self.image_screening_parameters)
                     average += new_chunk[image_id][2]
             self.chunk = new_chunk
-            print("{} features on average.".format(average/len(self.chunk)))
+            print(f"{average / len(self.chunk)} features on average.")
 
         ##########
         self.do_lower_case = args.do_lower_case
@@ -83,7 +88,7 @@ class NLVRDataset(Dataset):
     def get_image_features_by_training_index(self, index, which_one):
         item = self.items[index]
 
-        image_file_name = "{}img{}.png.npz".format(item['identifier'][:-1], which_one)
+        image_file_name = f"{item['identifier'][:-1]}img{which_one}.png.npz"
 
         return self.chunk[image_file_name]
 
@@ -130,15 +135,13 @@ class NLVRDataset(Dataset):
                         example = bert_example,
                         tokenizer=self.tokenizer,
                         probability = 0.15)
-            bert_feature.insert_tensor_into_dict(sample)
         else:
             subword_tokens_a = self.tokenizer.tokenize(caption_a)
             bert_example = InputExample(unique_id = index, text_a = subword_tokens_a, text_b = None, is_correct=1 if item.get("label", None) == "True" else 0, max_seq_length = self.max_seq_length)
             bert_feature = InputFeatures.convert_one_example_to_features(
                 example = bert_example,
                 tokenizer=self.tokenizer)
-            bert_feature.insert_tensor_into_dict(sample)
-
+        bert_feature.insert_tensor_into_dict(sample)
         return sample
 
 
@@ -147,12 +150,16 @@ class NLVRDataset(Dataset):
         data_root = args.data_root
         args_copy = deepcopy(args)
         args_copy.split = "train"
-        args_copy.annots_path = os.path.join(data_root, "{}.json".format(args_copy.split))
+        args_copy.annots_path = os.path.join(data_root, f"{args_copy.split}.json")
 
         if args.image_screening_parameters["image_feature_cap"] is not None and args.image_screening_parameters["image_feature_cap"] > 36:
-            args_copy.chunk_path = os.path.join(data_root, "features_{}_150.th".format(args_copy.split))
+            args_copy.chunk_path = os.path.join(
+                data_root, f"features_{args_copy.split}_150.th"
+            )
         else:
-            args_copy.chunk_path = os.path.join(data_root, "features_chunk_{}.th".format(args_copy.split))
+            args_copy.chunk_path = os.path.join(
+                data_root, f"features_chunk_{args_copy.split}.th"
+            )
 
         if args.get("do_test", False):
             trainset = None
@@ -162,11 +169,15 @@ class NLVRDataset(Dataset):
             trainset.is_train = True
             args_copy = deepcopy(args)
             args_copy.split = "dev"
-            args_copy.annots_path = os.path.join(data_root, "{}.json".format(args_copy.split))
+            args_copy.annots_path = os.path.join(data_root, f"{args_copy.split}.json")
             if args.image_screening_parameters["image_feature_cap"] is not None and args.image_screening_parameters["image_feature_cap"] > 36:
-                args_copy.chunk_path = os.path.join(data_root, "features_{}_150.th".format(args_copy.split))
+                args_copy.chunk_path = os.path.join(
+                    data_root, f"features_{args_copy.split}_150.th"
+                )
             else:
-                args_copy.chunk_path = os.path.join(data_root, "features_chunk_{}.th".format(args_copy.split))
+                args_copy.chunk_path = os.path.join(
+                    data_root, f"features_chunk_{args_copy.split}.th"
+                )
 
             validationset = cls(args_copy)
             validationset.is_train = False
@@ -177,11 +188,15 @@ class NLVRDataset(Dataset):
         if args.get("test_on_hidden", False):
             args_copy.split = "test2"
 
-        args_copy.annots_path = os.path.join(data_root, "{}.json".format(args_copy.split))
+        args_copy.annots_path = os.path.join(data_root, f"{args_copy.split}.json")
         if args.image_screening_parameters["image_feature_cap"] is not None and args.image_screening_parameters["image_feature_cap"] > 36:
-            args_copy.chunk_path = os.path.join(data_root, "features_{}_150.th".format(args_copy.split))
+            args_copy.chunk_path = os.path.join(
+                data_root, f"features_{args_copy.split}_150.th"
+            )
         else:
-            args_copy.chunk_path = os.path.join(data_root, "features_chunk_{}.th".format(args_copy.split))
+            args_copy.chunk_path = os.path.join(
+                data_root, f"features_chunk_{args_copy.split}.th"
+            )
         testset = cls(args_copy)
         testset.is_train = False
 

@@ -26,13 +26,7 @@ class SymbolicVocab:
         self.attributes = attributes
         self.objects = objects
 
-        self.id2word = []
-        self.id2word.append(cls_token)
-        self.id2word.append(sep_token)
-        self.id2word.append(mask_token)
-        self.id2word.extend(attributes)
-        self.id2word.extend(objects)
-
+        self.id2word = [cls_token, sep_token, mask_token, *attributes, *objects]
         self.length_of_attribute = len(attributes)
 
         self.word2id = {}
@@ -49,13 +43,11 @@ class SymbolicVocab:
         return self.attributes[index]
 
     def get_symbolic_list(self, tokenizer):
-        all_subwords = []
-        for word in self.id2word:
-            all_subwords.append(tokenizer.convert_tokens_to_ids(tokenizer.tokenize(word)))
-        return all_subwords
+        return [
+            tokenizer.convert_tokens_to_ids(tokenizer.tokenize(word))
+            for word in self.id2word
+        ]
     
     def get_seg_id(self, word_id):
-        if word_id >= 3 and word_id < self.length_of_attribute + 3:
-            return 1
-        return 0
+        return 1 if word_id >= 3 and word_id < self.length_of_attribute + 3 else 0
     

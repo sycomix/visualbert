@@ -54,8 +54,17 @@ def save_image(filename, url, img_hash, wrong_hash_file):
                     try:
                         saved_hash = str(imagehash.average_hash(Image.open(save_path)))
 
-                        if not saved_hash == img_hash:
-                            wrong_hash_file.write(str(url) + "\t" + str(filename) + "\t" + str(saved_hash) + "\t" + str(img_hash) + "\n")
+                        if saved_hash != img_hash:
+                            wrong_hash_file.write(
+                                str(url)
+                                + "\t"
+                                + str(filename)
+                                + "\t"
+                                + saved_hash
+                                + "\t"
+                                + str(img_hash)
+                                + "\n"
+                            )
                     except OSError as e:
                         return e
                 except requests.exceptions.ConnectionError as e:
@@ -76,8 +85,11 @@ hash_file = sys.argv[3]
 hashes = json.loads(open(hash_file).read())
 
 pbar.start()
-with open(split_name + "_failed_imgs.txt", "a") as ofile, open(split_name + "_checked_imgs.txt", "a") as checked_file, open(split_name + "_failed_hashes.txt", "a") as failed_hash_file:
-    checked_urls = set([line.strip() for line in open(split_name + "_checked_imgs.txt").readlines()])
+with (open(f"{split_name}_failed_imgs.txt", "a") as ofile, open(f"{split_name}_checked_imgs.txt", "a") as checked_file, open(f"{split_name}_failed_hashes.txt", "a") as failed_hash_file):
+    checked_urls = {
+        line.strip()
+        for line in open(f"{split_name}_checked_imgs.txt").readlines()
+    }
     num_none = 0
     num_total = 0
 
@@ -85,13 +97,13 @@ with open(split_name + "_failed_imgs.txt", "a") as ofile, open(split_name + "_ch
         split_id = example["identifier"].split("-")
         image_id = "-".join(split_id[:3])
 
-        left_image_name = image_id + "-img0.png"
-        right_image_name = image_id + "-img1.png"
+        left_image_name = f"{image_id}-img0.png"
+        right_image_name = f"{image_id}-img1.png"
 
         left_url = example["left_url"]
         right_url = example["right_url"]
 
-        if not left_url in checked_urls:
+        if left_url not in checked_urls:
             status_code = save_image(left_image_name, left_url, hashes[left_image_name], failed_hash_file)
             if status_code != 200:
                 ofile.write(str(status_code) + "\t" + left_image_name + "\t" + left_url + "\n")
@@ -100,7 +112,7 @@ with open(split_name + "_failed_imgs.txt", "a") as ofile, open(split_name + "_ch
             checked_urls.add(left_url)
             checked_file.write(left_url + "\n")
             num_total += 1
-        if not right_url in checked_urls:
+        if right_url not in checked_urls:
             status_code = save_image(right_image_name, right_url, hashes[right_image_name], failed_hash_file)
             if status_code != 200:
                 ofile.write(str(status_code) + "\t" + right_image_name + "\t" + right_url + "\n")
@@ -113,5 +125,5 @@ with open(split_name + "_failed_imgs.txt", "a") as ofile, open(split_name + "_ch
         pbar.update(i)
 
 pbar.finish()
-print("number of missing images: " + str(num_none))
-print("total number of requests: " + str(num_total))
+print(f"number of missing images: {str(num_none)}")
+print(f"total number of requests: {str(num_total)}")

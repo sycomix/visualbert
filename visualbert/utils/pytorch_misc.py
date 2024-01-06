@@ -90,7 +90,7 @@ def clip_grad_norm(named_parameters, max_norm, clip=True, verbose=False):
         param_to_norm[n] = param_norm
         param_to_shape[n] = tuple(p.size())
         if np.isnan(param_norm.item()):
-            raise ValueError("the param {} was null.".format(n))
+            raise ValueError(f"the param {n} was null.")
 
     total_norm = total_norm ** (1. / 2)
     clip_coef = max_norm / (total_norm + 1e-6)
@@ -146,10 +146,12 @@ def find_latest_checkpoint(serialization_dir, epoch_to_load = None):
         else:
             epoch_to_load = '{0}.{1}'.format(last_epoch[0], last_epoch[1])
 
-    model_path = os.path.join(serialization_dir,
-                              "model_state_epoch_{}.th".format(epoch_to_load))
-    training_state_path = os.path.join(serialization_dir,
-                                       "training_state_epoch_{}.th".format(epoch_to_load))
+    model_path = os.path.join(
+        serialization_dir, f"model_state_epoch_{epoch_to_load}.th"
+    )
+    training_state_path = os.path.join(
+        serialization_dir, f"training_state_epoch_{epoch_to_load}.th"
+    )
     return model_path, training_state_path
 
 def find_latest_checkpoint_step(serialization_dir, epoch_to_load = None):
@@ -184,10 +186,12 @@ def find_latest_checkpoint_step(serialization_dir, epoch_to_load = None):
                 max_step = i[1]
                 max_index = index
 
-    model_path = os.path.join(serialization_dir,
-                              "model_step_{}_epoch_{}.th".format(max_step, max_epoch))
-    training_state_path = os.path.join(serialization_dir,
-                                       "training_step_{}_epoch_{}.th".format(max_step, max_epoch))
+    model_path = os.path.join(
+        serialization_dir, f"model_step_{max_step}_epoch_{max_epoch}.th"
+    )
+    training_state_path = os.path.join(
+        serialization_dir, f"training_step_{max_step}_epoch_{max_epoch}.th"
+    )
     return model_path, training_state_path
 
 
@@ -206,24 +210,28 @@ def save_checkpoint(model, optimizer, serialization_dir, epoch, val_metric_per_e
         be copied to a "best.th" file. The value of this flag should
         be based on some validation metric computed by your model.
     """
-    if serialization_dir is not None:
-        model_path = os.path.join(serialization_dir, "model_state_epoch_{}.th".format(epoch))
-        model_state = model.module.state_dict() if isinstance(model, DataParallel) else model.state_dict()
-        torch.save(model_state, model_path)
+    if serialization_dir is None:
+        return
+    model_path = os.path.join(serialization_dir, f"model_state_epoch_{epoch}.th")
+    model_state = model.module.state_dict() if isinstance(model, DataParallel) else model.state_dict()
+    torch.save(model_state, model_path)
 
-        training_state = {'epoch': epoch,
-                          'val_metric_per_epoch': val_metric_per_epoch,
-                          'optimizer': optimizer.state_dict()
-                          }
-        if learning_rate_scheduler is not None:
-            training_state["learning_rate_scheduler"] = \
-                learning_rate_scheduler.lr_scheduler.state_dict()
-        training_path = os.path.join(serialization_dir,
-                                     "training_state_epoch_{}.th".format(epoch))
-        torch.save(training_state, training_path)
-        if is_best:
-            print("Best validation performance so far. Copying weights to '{}/best.th'.".format(serialization_dir))
-            shutil.copyfile(model_path, os.path.join(serialization_dir, "best.th"))
+    training_state = {'epoch': epoch,
+                      'val_metric_per_epoch': val_metric_per_epoch,
+                      'optimizer': optimizer.state_dict()
+                      }
+    if learning_rate_scheduler is not None:
+        training_state["learning_rate_scheduler"] = \
+            learning_rate_scheduler.lr_scheduler.state_dict()
+    training_path = os.path.join(
+        serialization_dir, f"training_state_epoch_{epoch}.th"
+    )
+    torch.save(training_state, training_path)
+    if is_best:
+        print(
+            f"Best validation performance so far. Copying weights to '{serialization_dir}/best.th'."
+        )
+        shutil.copyfile(model_path, os.path.join(serialization_dir, "best.th"))
 
 
 def restore_best_checkpoint(model, serialization_dir):
@@ -283,11 +291,11 @@ def restore_checkpoint(model, optimizer, serialization_dir, epoch_to_load = None
     latest_checkpoint = find_latest_checkpoint(serialization_dir, epoch_to_load)
     latest_checkpoint_step = find_latest_checkpoint_step(serialization_dir, epoch_to_load)
 
-    if latest_checkpoint is None and latest_checkpoint_step is None:
-        # No checkpoint to restore, start at 0
-        return 0, []
-
     if latest_checkpoint is None:
+        if latest_checkpoint_step is None:
+            # No checkpoint to restore, start at 0
+            return 0, []
+
         latest_checkpoint = latest_checkpoint_step
 
     model_path, training_state_path = latest_checkpoint
@@ -325,9 +333,13 @@ def restore_checkpoint(model, optimizer, serialization_dir, epoch_to_load = None
     else:
         epoch_to_return = int(training_state["epoch"].split('.')[0]) + 1
 
-    print("########### Restroing states... from {}, at epoch {}".format(model_path, epoch_to_return))
+    print(
+        f"########### Restroing states... from {model_path}, at epoch {epoch_to_return}"
+    )
     if "step" in training_state:
-        print("########### Restroing states... from {}, at step {}".format(model_path, training_state["step"]))
+        print(
+            f'########### Restroing states... from {model_path}, at step {training_state["step"]}'
+        )
 
     return epoch_to_return, val_metric_per_epoch
 
@@ -359,9 +371,15 @@ def print_para(model):
         if p.requires_grad:
             total_params_training += np.prod(p.size())
     pd.set_option('display.max_columns', None)
-    shapes_df = pd.DataFrame([(p_name, '[{}]'.format(','.join(size)), prod, p_req_grad)
-                              for p_name, (size, prod, p_req_grad) in sorted(st.items(), key=lambda x: -x[1][1])],
-                             columns=['name', 'shape', 'size', 'requires_grad']).set_index('name')
+    shapes_df = pd.DataFrame(
+        [
+            (p_name, f"[{','.join(size)}]", prod, p_req_grad)
+            for p_name, (size, prod, p_req_grad) in sorted(
+                st.items(), key=lambda x: -x[1][1]
+            )
+        ],
+        columns=['name', 'shape', 'size', 'requires_grad'],
+    ).set_index('name')
 
     print('\n {:.1f}M total parameters. {:.1f}M training \n ----- \n {} \n ----'.format(total_params / 1000000.0,
                                                                                         total_params_training / 1000000.0,
@@ -396,13 +414,11 @@ def masked_unk_softmax(x, dim, mask_idx):
     x1 = F.softmax(x, dim=dim)
     x1[:, mask_idx] = 0
     x1_sum = torch.sum(x1, dim=1, keepdim=True)
-    y = x1 / x1_sum
-    return y
+    return x1 / x1_sum
 
 def compute_score_with_logits(logits, labels):
     logits = masked_unk_softmax(logits, 1, 0)
     logits = torch.max(logits, 1)[1].data  # argmax
     one_hots = torch.zeros_like(labels)
     one_hots.scatter_(1, logits.view(-1, 1), 1)
-    scores = (one_hots * labels)
-    return scores
+    return (one_hots * labels)

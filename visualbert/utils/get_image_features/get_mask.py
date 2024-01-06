@@ -265,9 +265,8 @@ def recurse_find_image(folder, image_list, image_ext):
         path = os.path.join(folder, i)
         if os.path.isdir(path):
             recurse_find_image(path, image_list, image_ext)
-        else:
-            if path.endswith(image_ext):
-                image_list.append(path)
+        elif path.endswith(image_ext):
+            image_list.append(path)
 
 
 def main(args):
@@ -280,24 +279,21 @@ def main(args):
     recurse_find_image(args.im_or_folder, im_list, args.image_ext)
     print(im_list[:10])
 
-    print("There are {} images to cache in total.".format(len(im_list)))
+    print(f"There are {len(im_list)} images to cache in total.")
 
     if args.total_split != 1:
         im_lists = np.array_split(im_list, args.total_split)
         im_list= im_lists[args.current_split]
-        print("Split {}: There are currently {} images to cache.".format(args.current_split ,len(im_list)))
+        print(
+            f"Split {args.current_split}: There are currently {len(im_list)} images to cache."
+        )
 
     '''if os.path.isdir(args.im_or_folder):
         im_list = glob.iglob(args.im_or_folder + '/*.' + args.image_ext)
     else:
         im_list = [args.im_or_folder]'''
 
-    #print("{} images in total.".format(len(im_list)))
-    # extract bboxes from bottom-up attention model
-    image_bboxes={}
-    if args.bbox_file is not None:
-        image_bboxes = extract_bboxes(args.bbox_file)
-
+    image_bboxes = {} if args.bbox_file is None else extract_bboxes(args.bbox_file)
     count = 0
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
@@ -306,13 +302,13 @@ def main(args):
     if one_giant_file is not None:
         giant_file = {}
 
-    for i, im_name in enumerate(im_list):
+    for im_name in im_list:
         im_base_name = os.path.basename(im_name)
-        if not args.no_id:
-            image_id = int(im_base_name.split(".")[0].split("_")[-1])   # for COCO
-        else:
-            image_id = None
-
+        image_id = (
+            int(im_base_name.split(".")[0].split("_")[-1])
+            if not args.no_id
+            else None
+        )
         if not args.no_id:
             '''if image_id % args.total_group == args.group_id:
                 if not args.no_id:
@@ -353,8 +349,8 @@ def main(args):
             bbox = None
             im = cv2.imread(im_name)
             if im is not None:
-                outfile = os.path.join(args.output_dir, im_base_name) + ".npz"
-                lock_folder = outfile + '.lock'
+                outfile = f"{os.path.join(args.output_dir, im_base_name)}.npz"
+                lock_folder = f'{outfile}.lock'
                 if not os.path.exists(lock_folder) and os.path.exists(outfile):
                     continue
                 if not os.path.exists(lock_folder):

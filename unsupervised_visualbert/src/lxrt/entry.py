@@ -28,42 +28,39 @@ def get_padding_lengths(list_of_np_array):
     return_dict = defaultdict(int)
     for array in list_of_np_array:
         for i, shape in enumerate(array.shape):
-            if return_dict["dimension_{}".format(i)] < shape:
-                return_dict["dimension_{}".format(i)] = shape
+            return_dict[f"dimension_{i}"] = max(return_dict[f"dimension_{i}"], shape)
     return return_dict
 
 def pad_np_arrays(list_of_np_array, padding_value, dtype, cuda = True):
     if isinstance(list_of_np_array[0], list):
         list_of_np_array = [np.array(i, dtype=dtype) for i in list_of_np_array]
-    
+
     if list_of_np_array[0] is None:
         return None
 
     padding_lengths = get_padding_lengths(list_of_np_array)
 
-    max_shape = [padding_lengths["dimension_{}".format(i)]
-                    for i in range(len(padding_lengths))]
+    max_shape = [
+        padding_lengths[f"dimension_{i}"] for i in range(len(padding_lengths))
+    ]
 
     # Convert explicitly to an ndarray just in case it's an scalar (it'd end up not being an ndarray otherwise)
     final_list = []
 
-    for array_index, array in enumerate(list_of_np_array):
+    for array in list_of_np_array:
         return_array = numpy.asarray(numpy.ones(max_shape, dtype = dtype) * padding_value)
         # If the tensor has a different shape from the largest tensor, pad dimensions with zeros to
         # form the right shaped list of slices for insertion into the final tensor.
         slicing_shape = list(array.shape)
         #if len(array.shape) < len(max_shape):
         #    slicing_shape = slicing_shape + [0 for _ in range(len(max_shape) - len(array.shape))]
-        slices = tuple([slice(0, x) for x in slicing_shape])
+        slices = tuple(slice(0, x) for x in slicing_shape)
 
         return_array[slices] = array
         final_list.append(return_array)
     final_list = np.stack(final_list, 0)
     tensor = torch.from_numpy(final_list)
-    if cuda:
-        return tensor.cuda()
-    else:
-        return tensor
+    return tensor.cuda() if cuda else tensor
 
 #from param import args
 
@@ -258,20 +255,22 @@ class LXRTEncoder(nn.Module):
         input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long).cuda()
         segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long).cuda()
 
-        output = self.model(input_ids, segment_ids, input_mask,
-                            visual_feats=feats,
-                            visual_attention_mask=visual_attention_mask,
-                            visual_feats_seg_ids = visual_feats_seg_ids)
-        return output
+        return self.model(
+            input_ids,
+            segment_ids,
+            input_mask,
+            visual_feats=feats,
+            visual_attention_mask=visual_attention_mask,
+            visual_feats_seg_ids=visual_feats_seg_ids,
+        )
 
     def save(self, path):
-        torch.save(self.model.state_dict(),
-                   os.path.join("%s_LXRT.pth" % path))
+        torch.save(self.model.state_dict(), os.path.join(f"{path}_LXRT.pth"))
 
     def load(self, path):
         # Load state_dict from snapshot file
-        print("Load LXMERT pre-trained model from %s" % path)
-        state_dict = torch.load("%s_LXRT.pth" % path)
+        print(f"Load LXMERT pre-trained model from {path}")
+        state_dict = torch.load(f"{path}_LXRT.pth")
         new_state_dict = {}
         for key, value in state_dict.items():
             if key.startswith("module."):

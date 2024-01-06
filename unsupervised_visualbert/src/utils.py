@@ -25,14 +25,14 @@ def load_obj_tsv(fname, topk=None):
     """
     data = []
     start_time = time.time()
-    print("Start to load Faster-RCNN detected objects from %s" % fname)
+    print(f"Start to load Faster-RCNN detected objects from {fname}")
     with open(fname) as f:
         reader = csv.DictReader(f, FIELDNAMES, delimiter="\t")
         for i, item in enumerate(tqdm(reader)):
 
             for key in ['img_h', 'img_w', 'num_boxes']:
                 item[key] = int(item[key])
-            
+
             boxes = item['num_boxes']
             decode_config = [
                 ('objects_id', (boxes, ), np.int64),
@@ -57,12 +57,11 @@ def load_obj_tsv(fname, topk=None):
 def load_obj_tsv_save_to_h5(fname, save_h5_name, save_json_name, all_examples):
     import h5py
     import json
-    data = []
     start_time = time.time()
-    print("Start to load Faster-RCNN detected objects from %s" % fname)
+    print(f"Start to load Faster-RCNN detected objects from {fname}")
 
     metadata = []
-    
+
     import h5py
     h5_file = h5py.File(save_h5_name, 'w')
     h5_features = h5_file.create_dataset('features', (all_examples, 36, 2048), dtype=np.float32)
@@ -78,7 +77,7 @@ def load_obj_tsv_save_to_h5(fname, save_h5_name, save_json_name, all_examples):
 
             for key in ['img_h', 'img_w', 'num_boxes']:
                 item[key] = int(item[key])
-            
+
             boxes = item['num_boxes']
             decode_config = [
                 ('objects_id', (boxes, ), np.int64),
@@ -110,17 +109,16 @@ def load_obj_tsv_save_to_h5(fname, save_h5_name, save_json_name, all_examples):
 
     with open(save_json_name, "w") as f:
         json.dump(metadata, f)
-    return data
+    return []
 
 def create_slim_h5(fname, save_h5_name, save_json_name, all_examples, img_ids_to_keep):
     import h5py
     import json
-    data = []
     start_time = time.time()
-    print("Start to load Faster-RCNN detected objects from %s" % fname)
+    print(f"Start to load Faster-RCNN detected objects from {fname}")
 
     metadata = []
-    
+
     import h5py
     h5_file = h5py.File(save_h5_name, 'w')
     h5_features = h5_file.create_dataset('features', (all_examples, 36, 2048), dtype=np.float32)
@@ -139,7 +137,7 @@ def create_slim_h5(fname, save_h5_name, save_json_name, all_examples, img_ids_to
 
             for key in ['img_h', 'img_w', 'num_boxes']:
                 item[key] = int(item[key])
-            
+
             boxes = item['num_boxes']
             decode_config = [
                 ('objects_id', (boxes, ), np.int64),
@@ -170,10 +168,10 @@ def create_slim_h5(fname, save_h5_name, save_json_name, all_examples, img_ids_to
             i += 1
     with open(save_json_name, "w") as f:
         json.dump(metadata, f)
-    return data
+    return []
 
 def load_lxmert_sgg(path, model):
-    print("Load rel pre-trained LXMERT from %s " % path)
+    print(f"Load rel pre-trained LXMERT from {path} ")
     loaded_state_dict = torch.load(path)["model"]
     model_state_dict = model.state_dict()
     '''print("loaded_state_dict", loaded_state_dict["model"].keys())
@@ -181,16 +179,15 @@ def load_lxmert_sgg(path, model):
     print("model_state_dict", model_state_dict.keys())
     assert(0)'''
 
-    new_loaded_state_dict = {}
-    for key in list(loaded_state_dict.keys()):
-        if "lxrt" in key:
-            new_loaded_state_dict[key.split("lxrt.")[-1]] = loaded_state_dict[key]
-            # module.rel_heads.rel_predictor.lxrt.encoder.r_layers.3.output.LayerNorm.weight -> encoder.r_layers.3.output.LayerNorm.weight
-
+    new_loaded_state_dict = {
+        key.split("lxrt.")[-1]: loaded_state_dict[key]
+        for key in list(loaded_state_dict.keys())
+        if "lxrt" in key
+    }
     load_state_dict_flexible(model.lxrt_encoder.model.bert, new_loaded_state_dict)
     
 def load_lxmert_sgg_pretrain(path, model):
-    print("Load rel pre-trained LXMERT from %s " % path)
+    print(f"Load rel pre-trained LXMERT from {path} ")
     loaded_state_dict = torch.load(path)["model"]
     model_state_dict = model.state_dict()
     '''print("loaded_state_dict", loaded_state_dict.keys())
@@ -198,16 +195,15 @@ def load_lxmert_sgg_pretrain(path, model):
     print("model_state_dict", model_state_dict.keys())
     assert(0)'''
 
-    new_loaded_state_dict = {}
-    for key in list(loaded_state_dict.keys()):
-        if "lxrt" in key:
-            new_loaded_state_dict[key.split("lxrt.")[-1]] = loaded_state_dict[key]
-            # module.rel_heads.rel_predictor.lxrt.encoder.r_layers.3.output.LayerNorm.weight -> encoder.r_layers.3.output.LayerNorm.weight
-
+    new_loaded_state_dict = {
+        key.split("lxrt.")[-1]: loaded_state_dict[key]
+        for key in list(loaded_state_dict.keys())
+        if "lxrt" in key
+    }
     load_state_dict_flexible(model.bert, new_loaded_state_dict)
     
 def load_lxmert_to_sgg(path, model):
-    print("Load rel pre-trained LXMERT from %s " % path)
+    print(f"Load rel pre-trained LXMERT from {path} ")
     loaded_state_dict = torch.load(path)["model"]
     model_state_dict = model.state_dict()
     '''print("loaded_state_dict", loaded_state_dict.keys())
@@ -215,12 +211,11 @@ def load_lxmert_to_sgg(path, model):
     print("model_state_dict", model_state_dict.keys())
     assert(0)'''
 
-    new_loaded_state_dict = {}
-    for key in list(loaded_state_dict.keys()):
-        if "lxrt" in key:
-            new_loaded_state_dict[key.split("lxrt.")[-1]] = loaded_state_dict[key]
-            # module.rel_heads.rel_predictor.lxrt.encoder.r_layers.3.output.LayerNorm.weight -> encoder.r_layers.3.output.LayerNorm.weight
-
+    new_loaded_state_dict = {
+        key.split("lxrt.")[-1]: loaded_state_dict[key]
+        for key in list(loaded_state_dict.keys())
+        if "lxrt" in key
+    }
     load_state_dict_flexible(model.bert, new_loaded_state_dict)
     
 
@@ -234,13 +229,13 @@ def load_state_dict_flexible(model, state_dict):
 
     for name, param in state_dict.items():
         if name not in own_state:
-            print("Skipped: " + name)
+            print(f"Skipped: {name}")
             continue
         if isinstance(param, torch.nn.Parameter):
             # backwards compatibility for serialized parameters
             param = param.data
         try:
             own_state[name].copy_(param)
-            print("Successfully loaded: "+name)
+            print(f"Successfully loaded: {name}")
         except:
-            print("Part load failed: " + name)
+            print(f"Part load failed: {name}")

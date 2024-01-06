@@ -3,7 +3,7 @@ import json
 
 GQA_ROOT = '../'
 
-path = Path(GQA_ROOT + 'data')
+path = Path(f'{GQA_ROOT}data')
 split2name = {
     'train': 'train',
     'valid': 'val',
@@ -15,7 +15,7 @@ for split, name in split2name.items():
     if split == 'train':
         paths = list((path / 'train_all_questions').iterdir())
     else:
-        paths = [path / ("%s_all_questions.json" % name)]
+        paths = [path / f"{name}_all_questions.json"]
     print(split, paths)
 
     for tmp_path in paths:
@@ -31,6 +31,7 @@ for split, name in split2name.items():
                     new_datum['label'] = {datum['answer']: 1.}
                 new_data.append(new_datum)
     print(split, len(new_data))
-    json.dump(new_data, open("../%s_all.json" % split, 'w'),
-              indent=4, sort_keys=True)
+    json.dump(
+        new_data, open(f"../{split}_all.json", 'w'), indent=4, sort_keys=True
+    )
 

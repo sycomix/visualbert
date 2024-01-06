@@ -72,8 +72,7 @@ def get_model(use_keypoints=False):
     assert_and_infer_cfg(cache_urls=False)
     assert not cfg.MODEL.RPN_ONLY, 'RPN models are not supported'
     assert not cfg.TEST.PRECOMPUTED_PROPOSALS, 'Models that require precomputed proposals are not supported'
-    model = infer_engine.initialize_model_from_cfg(weights_arg)
-    return model
+    return infer_engine.initialize_model_from_cfg(weights_arg)
 
 
 def detect_from_img(model, im, dets_pkl_fn=None, dets_json_fn=None, debug_img_fn=None):
@@ -98,7 +97,9 @@ def detect_from_img(model, im, dets_pkl_fn=None, dets_json_fn=None, debug_img_fn
     #for k, v in timers.items():
     #    logger.info(' | {}: {:.3f}s'.format(k, v.average_time))
 
-    if not isinstance(cls_boxes, list) or not any([x.size > 0 for x in cls_boxes if hasattr(x, 'size')]):
+    if not isinstance(cls_boxes, list) or all(
+        x.size <= 0 for x in cls_boxes if hasattr(x, 'size')
+    ):
         print("Skip because of other things")
         return None, None, None
 
@@ -128,11 +129,10 @@ def detect_from_img(model, im, dets_pkl_fn=None, dets_json_fn=None, debug_img_fn
                 mask_slice.copy(), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_TC89_KCOS)
             contours.append([c.squeeze(1).tolist() for c in contour])
 
-    # get the names
-    obj_names = []
-    for object_counter, obj_id in enumerate(classes):
-        obj_names.append('{} ({})'.format(object_counter+1, dummy_coco_dataset.classes[obj_id].replace(' ', '')))
-
+    obj_names = [
+        f"{object_counter + 1} ({dummy_coco_dataset.classes[obj_id].replace(' ', '')})"
+        for object_counter, obj_id in enumerate(classes)
+    ]
     if dets_json_fn is not None:
         with open(dets_json_fn, 'w') as f:
             json.dump({
@@ -281,7 +281,7 @@ def vis_one_image(
     ext = im_name.split('.')[-1]
     rest_of_the_fn = im_name[:-(len(ext) + 1)]
     ext2use = 'png' if ext == 'jpg' else ext
-    output_name = rest_of_the_fn + '.' + ext2use
+    output_name = f'{rest_of_the_fn}.{ext2use}'
     fig.savefig(output_name, dpi=dpi)
     plt.close('all')
 
@@ -289,7 +289,11 @@ def vis_one_image(
     if ext == 'jpg':
         assert os.path.exists(output_name)
         png_img = cv2.imread(output_name)
-        cv2.imwrite(rest_of_the_fn + '.' + ext, png_img, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+        cv2.imwrite(
+            f'{rest_of_the_fn}.{ext}',
+            png_img,
+            [int(cv2.IMWRITE_JPEG_QUALITY), 95],
+        )
         os.remove(output_name)
 
 
@@ -311,7 +315,9 @@ def convert_detections(im_file, dets_pkl_fn, dets_json_fn=None, debug_img_fn=Non
     cls_keyps = pkl_dict['keyps']
     im_shape = pkl_dict['im_shape']
 
-    if not isinstance(cls_boxes, list) or not any([x.size > 0 for x in cls_boxes if hasattr(x, 'size')]):
+    if not isinstance(cls_boxes, list) or all(
+        x.size <= 0 for x in cls_boxes if hasattr(x, 'size')
+    ):
         return None, None, None
 
     # Get the mask for visualization. #TODO do keypoints
@@ -336,12 +342,10 @@ def convert_detections(im_file, dets_pkl_fn, dets_json_fn=None, debug_img_fn=Non
                 mask_slice.copy(), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_TC89_KCOS)
             contours.append([c.squeeze(1).tolist() for c in contour])
 
-    # get the names
-    obj_names = []
-    for object_counter, obj_id in enumerate(classes):
-        obj_names.append('{} ({})'.format(object_counter+1, dummy_coco_dataset.classes[obj_id].replace(' ', '')))
-
-
+    obj_names = [
+        f"{object_counter + 1} ({dummy_coco_dataset.classes[obj_id].replace(' ', '')})"
+        for object_counter, obj_id in enumerate(classes)
+    ]
     # object_counter = defaultdict(int)
     # obj_names = []
     # for obj_id in classes:

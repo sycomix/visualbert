@@ -36,9 +36,7 @@ _ID_REGEX = re.compile(r"^[A-Za-z0-9=+._-]+$")
 
 
 def valid_id(id):
-    if _ID_REGEX.match(id):
-        return True
-    return False
+     return bool(_ID_REGEX.match(id))
 
 
 def _memmapped_view(filename):
@@ -46,23 +44,21 @@ def _memmapped_view(filename):
 
 
 def _build_path(id, prefix, shm_path):
-    fn = os.path.join(shm_path, prefix + id + '.npy')
-    fn_lock = fn + '.lock'
-    return fn, fn_lock
+     fn = os.path.join(shm_path, prefix + id + '.npy')
+     fn_lock = f'{fn}.lock'
+     return fn, fn_lock
 
 
 def free(id, shm_path='/dev/shm', prefix='sharearray_'):
-    fn, fn_lock = _build_path(id, prefix=prefix, shm_path=shm_path)
-    fn_exists = os.path.exists(fn)
-    fn_lock_exists = os.path.exists(fn_lock)
+     fn, fn_lock = _build_path(id, prefix=prefix, shm_path=shm_path)
+     fn_exists = os.path.exists(fn)
+     if fn_lock_exists := os.path.exists(fn_lock):
+          import warnings
+          warnings.warn("lock still exists")
+          os.unlink(fn_lock)
 
-    if fn_lock_exists:
-        import warnings
-        warnings.warn("lock still exists")
-        os.unlink(fn_lock)
-
-    if fn_exists:
-        os.unlink(fn)
+     if fn_exists:
+         os.unlink(fn)
 
 
 def cache(id, array_or_callback,
@@ -71,7 +67,7 @@ def cache(id, array_or_callback,
           timeout=-1,
           verbose=True,
           log_func=None):
-    """
+     """
     Stores a `numpy` `ndarray` into shared memory, caching subsequent requests
     (globally, across all processes) to the function so they point to the same
     memory.
@@ -152,57 +148,56 @@ def cache(id, array_or_callback,
         Only passing a callback to array_or_callback makes sense here,
         of course.
     """
-    if not valid_id(id):
-        raise ValueError('invalid id: ' + id)
+     if not valid_id(id):
+          raise ValueError(f'invalid id: {id}')
 
-    '''if not (hasattr(array_or_callback, '__call__')
+     '''if not (hasattr(array_or_callback, '__call__')
             or isinstance(array_or_callback, np.ndarray)):
         raise ValueError(
             'array_or_callback should be ndarray or zero-argument callable')'''
 
-    if verbose and log_func:
-        print_ = log_func
-    elif verbose:
-        def print_(s):
-            print(s)
-    else:
-        def print_(s):
-            pass
+     if verbose and log_func:
+         print_ = log_func
+     elif verbose:
+         def print_(s):
+             print(s)
+     else:
+         def print_(s):
+             pass
 
-    fn, fn_lock = _build_path(id, prefix=prefix, shm_path=shm_path)
-    fd_lock = -1
-    try:
-        fd_lock = os.open(fn_lock, os.O_CREAT | os.O_EXCL)
-        if fd_lock < 0:
-            raise OSError("Lock open failure (bug?)", fn_lock, fd_lock)
+     fn, fn_lock = _build_path(id, prefix=prefix, shm_path=shm_path)
+     fd_lock = -1
+     try:
+          fd_lock = os.open(fn_lock, os.O_CREAT | os.O_EXCL)
+          if fd_lock < 0:
+              raise OSError("Lock open failure (bug?)", fn_lock, fd_lock)
 
-    except FileExistsError:
-        if timeout < 0:
-            #print_(("'{}' is being created by another process. "
-            #        "Waiting indefinitely... (timeout < 0)").format(id))
+     except FileExistsError:
+          if timeout < 0:
+               #print_(("'{}' is being created by another process. "
+               #        "Waiting indefinitely... (timeout < 0)").format(id))
 
-            while os.path.exists(fn_lock):
-                time.sleep(1)
+               while os.path.exists(fn_lock):
+                   time.sleep(1)
 
-        else:
-            #print_(("'{}' is being created by another process. "
-            #        "Waiting up to {} seconds...").format(id, timeout))
+          else:
+                           #print_(("'{}' is being created by another process. "
+                           #        "Waiting up to {} seconds...").format(id, timeout))
 
-            for _ in range(timeout):
-                time.sleep(1)
-                if not os.path.exists(fn_lock):
-                    break
-            else:
-                raise TimeoutException(
-                    "timed out waiting for %s to unlock (be created)" % id)
-    else:
-        if not os.path.exists(fn):
-            print_("'%s' doesn't exist yet. Locking and creating..." % id)
-            if hasattr(array_or_callback, '__call__'):
-                array = array_or_callback()
-            else:
-                array = array_or_callback
-            '''if isinstance(array_or_callback, np.ndarray):
+               for _ in range(timeout):
+                    time.sleep(1)
+                    if not os.path.exists(fn_lock):
+                        break
+               else:
+                    raise TimeoutException(f"timed out waiting for {id} to unlock (be created)")
+     else:
+          if not os.path.exists(fn):
+               print_(f"'{id}' doesn't exist yet. Locking and creating...")
+               if hasattr(array_or_callback, '__call__'):
+                   array = array_or_callback()
+               else:
+                   array = array_or_callback
+               '''if isinstance(array_or_callback, np.ndarray):
                 array = array_or_callback
             else:
                 array = array_or_callback()
@@ -211,16 +206,16 @@ def cache(id, array_or_callback,
                         'callback did not return a numpy.ndarray, returned:',
                         type(array))'''
 
-            np.save(fn, array, allow_pickle=False)
-            print_("'%s': written." % id)
+               np.save(fn, array, allow_pickle=False)
+               print_(f"'{id}': written.")
 
-    finally:
-        if fd_lock > 0:
-            os.close(fd_lock)
-            os.unlink(fn_lock)
+     finally:
+          if fd_lock > 0:
+              os.close(fd_lock)
+              os.unlink(fn_lock)
 
-    print_("'%s': returning memmapped view." % id)
-    return _memmapped_view(fn)
+     print_(f"'{id}': returning memmapped view.")
+     return _memmapped_view(fn)
 
 def cache_with_delete_previous(id, array_or_callback,
           shm_path='/dev/shm',
@@ -230,7 +225,7 @@ def cache_with_delete_previous(id, array_or_callback,
           log_func=None,
           delete=None,
           wait=0):
-    """
+     """
     Stores a `numpy` `ndarray` into shared memory, caching subsequent requests
     (globally, across all processes) to the function so they point to the same
     memory.
@@ -311,67 +306,66 @@ def cache_with_delete_previous(id, array_or_callback,
         Only passing a callback to array_or_callback makes sense here,
         of course.
     """
-    if not valid_id(id):
-        raise ValueError('invalid id: ' + id)
+     if not valid_id(id):
+          raise ValueError(f'invalid id: {id}')
 
-    '''if not (hasattr(array_or_callback, '__call__')
+     '''if not (hasattr(array_or_callback, '__call__')
             or isinstance(array_or_callback, np.ndarray)):
         raise ValueError(
             'array_or_callback should be ndarray or zero-argument callable')'''
 
-    if verbose and log_func:
-        print_ = log_func
-    elif verbose:
-        def print_(s):
-            print(s)
-    else:
-        def print_(s):
-            pass
+     if verbose and log_func:
+         print_ = log_func
+     elif verbose:
+         def print_(s):
+             print(s)
+     else:
+         def print_(s):
+             pass
 
-    fn, fn_lock = _build_path(id, prefix=prefix, shm_path=shm_path)
-    fd_lock = -1
-    try:
-        fd_lock = os.open(fn_lock, os.O_CREAT | os.O_EXCL)
-        if fd_lock < 0:
-            raise OSError("Lock open failure (bug?)", fn_lock, fd_lock)
+     fn, fn_lock = _build_path(id, prefix=prefix, shm_path=shm_path)
+     fd_lock = -1
+     try:
+          fd_lock = os.open(fn_lock, os.O_CREAT | os.O_EXCL)
+          if fd_lock < 0:
+              raise OSError("Lock open failure (bug?)", fn_lock, fd_lock)
 
-    except FileExistsError:
-        if timeout < 0:
-            #print_(("'{}' is being created by another process. "
-            #        "Waiting indefinitely... (timeout < 0)").format(id))
+     except FileExistsError:
+          if timeout < 0:
+               #print_(("'{}' is being created by another process. "
+               #        "Waiting indefinitely... (timeout < 0)").format(id))
 
-            while os.path.exists(fn_lock):
-                time.sleep(1)
+               while os.path.exists(fn_lock):
+                   time.sleep(1)
 
-        else:
-            #print_(("'{}' is being created by another process. "
-            #        "Waiting up to {} seconds...").format(id, timeout))
+          else:
+                           #print_(("'{}' is being created by another process. "
+                           #        "Waiting up to {} seconds...").format(id, timeout))
 
-            for _ in range(timeout):
-                time.sleep(1)
-                if not os.path.exists(fn_lock):
-                    break
-            else:
-                raise TimeoutException(
-                    "timed out waiting for %s to unlock (be created)" % id)
-    else:
-        if not os.path.exists(fn):
-            print("Sleep a bit for other workers to finish whatever they are doing")
-            for _ in range(wait):
-                time.sleep(1)
-            if delete is not None:
-                print("Deleting {} on the way there".format(delete))
-                for i in delete:
-                    if os.path.exists(i):
-                        os.remove(i)
+               for _ in range(timeout):
+                    time.sleep(1)
+                    if not os.path.exists(fn_lock):
+                        break
+               else:
+                    raise TimeoutException(f"timed out waiting for {id} to unlock (be created)")
+     else:
+          if not os.path.exists(fn):
+               print("Sleep a bit for other workers to finish whatever they are doing")
+               for _ in range(wait):
+                   time.sleep(1)
+               if delete is not None:
+                   print("Deleting {} on the way there".format(delete))
+                   for i in delete:
+                       if os.path.exists(i):
+                           os.remove(i)
 
-            print_("'%s' doesn't exist yet. Locking and creating..." % id)
-            if hasattr(array_or_callback, '__call__'):
-                array = array_or_callback()
-            else:
-                array = array_or_callback
-            
-            '''if isinstance(array_or_callback, np.ndarray):
+               print_(f"'{id}' doesn't exist yet. Locking and creating...")
+               if hasattr(array_or_callback, '__call__'):
+                   array = array_or_callback()
+               else:
+                   array = array_or_callback
+
+               '''if isinstance(array_or_callback, np.ndarray):
                 array = array_or_callback
             else:
                 array = array_or_callback()
@@ -380,20 +374,20 @@ def cache_with_delete_previous(id, array_or_callback,
                         'callback did not return a numpy.ndarray, returned:',
                         type(array))'''
 
-            np.save(fn, array, allow_pickle=False)
-            print_("'%s': written." % id)
+               np.save(fn, array, allow_pickle=False)
+               print_(f"'{id}': written.")
 
-    finally:
-        if fd_lock > 0:
-            os.close(fd_lock)
-            os.unlink(fn_lock)
+     finally:
+          if fd_lock > 0:
+              os.close(fd_lock)
+              os.unlink(fn_lock)
 
-    #print_("'%s': returning memmapped view." % id)
-    return _memmapped_view(fn)
+     #print_("'%s': returning memmapped view." % id)
+     return _memmapped_view(fn)
 
 
 def decorator(id, **kwargs):
-    """
+     """
     Decorator version of `cache`, analogous to a memoization decorator.
 
     Besides `array_or_callback` which isn't needed, arguments are identical to
@@ -414,14 +408,14 @@ def decorator(id, **kwargs):
             arr = foo()  # first call, in shared memory arr global to system
             arr2 = foo() # here or another script, returns read-only view
     """
-    if not valid_id(id):
-        raise ValueError('invalid id: ' + id)
+     if not valid_id(id):
+          raise ValueError(f'invalid id: {id}')
 
-    def decorate(f):
-        @functools.wraps(f)
-        def wrapped():
-            return cache(id, f, **kwargs)
+     def decorate(f):
+         @functools.wraps(f)
+         def wrapped():
+             return cache(id, f, **kwargs)
 
-        return wrapped
+         return wrapped
 
-    return decorate
+     return decorate
