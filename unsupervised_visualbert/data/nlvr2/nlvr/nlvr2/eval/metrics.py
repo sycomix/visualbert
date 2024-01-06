@@ -3,7 +3,7 @@ import sys
 
 # Load the predictions file. Assume it is a CSV.
 predictions = { }
-for line in open(sys.argv[1]).readlines():
+for line in open(sys.argv[1]):
   if line:
     splits = line.strip().split(",")
     # We assume identifiers are in the format "split-####-#-#.png".
@@ -18,12 +18,12 @@ labeled_examples = [json.loads(line) for line in open(sys.argv[2]).readlines() i
 total_num = len(labeled_examples)
 if len(predictions) < total_num:
   print("Some predictions are missing!")
-  print("Got " + str(len(predictions)) + " predictions but expected " + str(total_num))
+  print(f"Got {len(predictions)} predictions but expected {total_num}")
 
   for example in labeled_examples:
-      lookup = example["identifier"]
-      if not lookup in predictions:
-        print("Missing prediction for item " + str(lookup))
+    lookup = example["identifier"]
+    if lookup not in predictions:
+      print(f"Missing prediction for item {str(lookup)}")
   exit()
 
 # Get the precision by iterating through the examples and checking the value
@@ -37,7 +37,7 @@ for example in labeled_examples:
   anon_label = example["identifier"].split("-")
   anon_label[2] = ''
   anon_label = '-'.join(anon_label)
-  if not anon_label in consistency_dict:
+  if anon_label not in consistency_dict:
     consistency_dict[anon_label] = True
   lookup = example["identifier"]
   prediction = predictions[lookup]
@@ -49,11 +49,11 @@ for example in labeled_examples:
 # Calculate consistency.
 num_consistent = 0.
 unique_sentence = len(consistency_dict)
-for identifier, consistent in consistency_dict.items():
+for consistent in consistency_dict.values():
   if consistent:
     num_consistent += 1
-  
+
 # Report values.
-print("accuracy=" + str(num_correct / total_num))
-print("consistency=" + str(num_consistent / unique_sentence))
+print(f"accuracy={str(num_correct / total_num)}")
+print(f"consistency={str(num_consistent / unique_sentence)}")
 

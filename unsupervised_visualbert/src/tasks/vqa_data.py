@@ -63,7 +63,7 @@ class VQADataset:
         # Loading datasets
         self.data = []
         for split in self.splits:
-            self.data.extend(json.load(open("data/vqa/%s.json" % split)))
+            self.data.extend(json.load(open(f"data/vqa/{split}.json")))
         print("Load %d data from split(s) %s." % (len(self.data), self.name))
 
         # Convert list to dict (for evaluation)
@@ -123,7 +123,7 @@ class VQATorchDataset(Dataset):
         else:
             topk = None
 
-        
+
         self.limit_to_symbolic_split = args.get("limit_to_symbolic_split", False)
         if self.limit_to_symbolic_split:
             dataDir = "/local/harold/ubert/bottom-up-attention/data/vg/"
@@ -145,11 +145,11 @@ class VQATorchDataset(Dataset):
             self.image_feature_dataset = ImageFeatureDataset.create(dataset.splits, Split2ImgFeatPath, on_memory = args.get("on_memory", False))
             self.ids_to_index = self.image_feature_dataset.ids_to_index
 
-            # Screen data
-            used_data = []
-            for datum in self.raw_dataset.data:
-                if datum['img_id'] in self.ids_to_index:
-                    used_data.append(datum)
+            used_data = [
+                datum
+                for datum in self.raw_dataset.data
+                if datum['img_id'] in self.ids_to_index
+            ]
         else:
             # Loading detection features to img_data
             img_data = []
@@ -157,15 +157,16 @@ class VQATorchDataset(Dataset):
                 # Minival is 5K images in MS COCO, which is used in evaluating VQA/LXMERT-pre-training.
                 # It is saved as the top 5K features in val2014_***.tsv
                 load_topk = 5000 if (split == 'minival' and topk is None) else topk
-                img_data.extend(load_obj_tsv(
-                    os.path.join(MSCOCO_IMGFEAT_ROOT, '%s_obj36.tsv' % (SPLIT2NAME[split])),
-                    topk=load_topk))
+                img_data.extend(
+                    load_obj_tsv(
+                        os.path.join(
+                            MSCOCO_IMGFEAT_ROOT, f'{SPLIT2NAME[split]}_obj36.tsv'
+                        ),
+                        topk=load_topk,
+                    )
+                )
 
-            # Convert img list to dict
-            self.imgid2img = {}
-            for img_datum in img_data:
-                self.imgid2img[img_datum['img_id']] = img_datum
-            
+            self.imgid2img = {img_datum['img_id']: img_datum for img_datum in img_data}
             used_data = self.raw_dataset.data
 
         used_data = used_data[::args.get("partial_dataset", 1)]
@@ -241,15 +242,13 @@ class VQATorchDataset(Dataset):
         else:
             tags = None
 
-        # Provide label (target)
-        if 'label' in datum:
-            label = datum['label']
-            target = torch.zeros(self.raw_dataset.num_answers)
-            for ans, score in label.items():
-                target[self.raw_dataset.ans2label[ans]] = score
-            return ques_id, feats, boxes, ques, tags, target
-        else:
+        if 'label' not in datum:
             return ques_id, feats, boxes, ques, tags
+        label = datum['label']
+        target = torch.zeros(self.raw_dataset.num_answers)
+        for ans, score in label.items():
+            target[self.raw_dataset.ans2label[ans]] = score
+        return ques_id, feats, boxes, ques, tags, target
 
 
 class VQAEvaluator:
@@ -279,12 +278,10 @@ class VQAEvaluator:
         :param path: The desired path of saved file.
         """
         with open(path, 'w') as f:
-            result = []
-            for ques_id, ans in quesid2ans.items():
-                result.append({
-                    'question_id': ques_id,
-                    'answer': ans
-                })
+            result = [
+                {'question_id': ques_id, 'answer': ans}
+                for ques_id, ans in quesid2ans.items()
+            ]
             json.dump(result, f, indent=4, sort_keys=True)
 
 

@@ -34,11 +34,7 @@ class CustomBatchSampler():
         self.rotate_index = [0] * len(self.upsample_ratios)
         self.reduce_to_non_batch_sampler = reduce_to_non_batch_sampler
 
-        _flag = False
-        for i in self.upsample_ratios:
-            if i < 1:
-                _flag = True
-
+        _flag = any(i < 1 for i in self.upsample_ratios)
         self.all_indexes = [torch.randperm(i).tolist() for i in self.lengths]
         assert(not args.get("old_sampler", False))
 
@@ -58,27 +54,25 @@ class CustomBatchSampler():
             if self.upsample_ratios[index] < 1:
                 sample_num = int(1 / self.upsample_ratios[index])
                 random_indexes = self.all_indexes[index][self.rotate_index[index]:][::sample_num]
-                
+
                 self.rotate_index[index] = self.rotate_index[index] + 1 #% sample_num
                 if self.rotate_index[index] == sample_num:
                     self.all_indexes[index] = torch.randperm(i).tolist()
                     self.rotate_index[index] = 0 # Reset rotate index 
 
                 random.shuffle(random_indexes)
-                random_indexes = [j + current_index for j in random_indexes]
-                random_indexes = chunks(random_indexes, self.batch_size)
-                #self.all_batched_indexes.extend(random_indexes)
+                        #self.all_batched_indexes.extend(random_indexes)
             else:
                 random_indexes = torch.randperm(i).tolist()
-                random_indexes = [j + current_index for j in random_indexes]
-                random_indexes = chunks(random_indexes, self.batch_size)
-                #self.all_batched_indexes.extend(random_indexes)
-            
+                        #self.all_batched_indexes.extend(random_indexes)
+
+            random_indexes = [j + current_index for j in random_indexes]
+            random_indexes = chunks(random_indexes, self.batch_size)
             random.shuffle(random_indexes)
             self.all_batched_indexes.append(random_indexes)
 
             if self.upsample_ratios[index] > 1:
-                for k in range(self.upsample_ratios[index] - 1):
+                for _ in range(self.upsample_ratios[index] - 1):
                     #if args.get("debug", False):
                     #    random_indexes = list(range(i))
                     #else:
@@ -88,7 +82,7 @@ class CustomBatchSampler():
 
                     random_indexes = chunks(random_indexes, self.batch_size)
                     #self.all_batched_indexes.extend(random_indexes)
-                    
+
                     random.shuffle(random_indexes)
                     self.all_batched_indexes[index].extend(random_indexes)
 
@@ -98,7 +92,7 @@ class CustomBatchSampler():
         original_recorder = [len(i) for i in self.all_batched_indexes]
         original_recorder = [i / sum(original_recorder) for i in original_recorder]
         index_recorder = np.array([len(i) - 1 for i in self.all_batched_indexes])
-        
+
         while np.any(index_recorder >= 0):
             choosed_index = np.random.choice(len(original_recorder), p=original_recorder)
             if index_recorder[choosed_index] >= 0:
@@ -110,10 +104,9 @@ class CustomBatchSampler():
         if self.reduce_to_non_batch_sampler:
             new_ = []
             for i in self.all_batched_indexes:
-                for j in i:
-                    new_.append([j])
+                new_.extend([j] for j in i)
             self.all_batched_indexes = new_
-        
+
         if args.get("gradient_accumulation_steps", None):
             flattened_indexes = []
             for indexes in self.all_batched_indexes:
@@ -149,7 +142,7 @@ class ConcateDataset(Dataset):
                 index -= len_of_datasets[i]
 
     def __len__(self):
-        return sum([len(i) for i in self.datasets])
+        return sum(len(i) for i in self.datasets)
 
 class ConcateH5():
     def __init__(self, list_of_h5):
@@ -183,15 +176,12 @@ class ImageFeatureDataset():
 
     def __getitem__(self, img_id):
         image_index = self.ids_to_index[img_id]
-        if self.h5_num_boxes is not None:
-            obj_num = self.h5_num_boxes[image_index]
-        else:
-            obj_num = 36
+        obj_num = 36 if self.h5_num_boxes is None else self.h5_num_boxes[image_index]
         feats = self.h5_features[image_index]
         boxes = self.h5_boxes[image_index]
         img_h = self.h5_wh[image_index][1]
         img_w = self.h5_wh[image_index][0]
-        
+
         # For VCR, we did not keep the labels rather we kept the confidence
         if self.version_3:
             obj_confs = np.array(self.h5_objects_conf[image_index][:, 1:])
@@ -274,10 +264,10 @@ class ImageFeatureDataset():
                     ids_to_index[i["img_id"]] = index + current_counter
                     wh_list.append((i['img_w'], i['img_h']))
                 current_counter += len(metadata)
-    
+
             h5_wh_list.append(wh_list)
-        
-        print("Created {}".format(sources))
+
+        print(f"Created {sources}")
         h5_features = ConcateH5(h5_features_list)
         h5_boxes = ConcateH5(h5_boxes_list)
         h5_objects_id = ConcateH5(h5_objects_id_list)
@@ -293,17 +283,31 @@ class ImageFeatureDataset():
         h5_file = h5py.File(h5_file_name, "r")
 
         if on_memory:
-            print("Reading h5 {}".format(h5_file))
+            print(f"Reading h5 {h5_file}")
             h5_features = sharearray.cache(h5_file_name.split("/")[-1], lambda: h5_file['features'])
             gc.collect()
         else:
             h5_features = h5_file['features']
-        
-        h5_boxes = sharearray.cache("{}_{}".format(h5_file_name.split("/")[-1], "boxes"), np.array(h5_file['boxes']))
-        h5_objects_id = sharearray.cache("{}_{}".format(h5_file_name.split("/")[-1], "objects_id"), np.array(h5_file['objects_id']))
-        h5_objects_conf = sharearray.cache("{}_{}".format(h5_file_name.split("/")[-1], "objects_conf"), np.array(h5_file['objects_conf']))
-        h5_attrs_id = sharearray.cache("{}_{}".format(h5_file_name.split("/")[-1], "attrs_id"), np.array(h5_file['attrs_id']))
-        h5_attrs_conf = sharearray.cache("{}_{}".format(h5_file_name.split("/")[-1], "attrs_conf"), np.array(h5_file['attrs_conf']))
+
+        h5_boxes = sharearray.cache(
+            f'{h5_file_name.split("/")[-1]}_boxes', np.array(h5_file['boxes'])
+        )
+        h5_objects_id = sharearray.cache(
+            f'{h5_file_name.split("/")[-1]}_objects_id',
+            np.array(h5_file['objects_id']),
+        )
+        h5_objects_conf = sharearray.cache(
+            f'{h5_file_name.split("/")[-1]}_objects_conf',
+            np.array(h5_file['objects_conf']),
+        )
+        h5_attrs_id = sharearray.cache(
+            f'{h5_file_name.split("/")[-1]}_attrs_id',
+            np.array(h5_file['attrs_id']),
+        )
+        h5_attrs_conf = sharearray.cache(
+            f'{h5_file_name.split("/")[-1]}_attrs_conf',
+            np.array(h5_file['attrs_conf']),
+        )
 
         for index in range(len(h5_attrs_id)):
             assert( np.all(h5_attrs_id[index] ==  np.array(h5_file['attrs_id'][index])))
@@ -321,34 +325,47 @@ class ImageFeatureDataset():
         h5_file = h5py.File(h5_file_name, "r")
 
         if on_memory:
-            print("Reading h5 {}".format(h5_file_name.replace("no_features", "features")))
+            print(f'Reading h5 {h5_file_name.replace("no_features", "features")}')
             h5_features = sharearray.cache(h5_file_name.replace("no_features", "features").split("/")[-1], lambda: h5_file_feature['image_features'])
             gc.collect()
-        else:
-            if not text_only:
-                h5_features = h5_file_feature['image_features']
-        
-        h5_boxes = sharearray.cache("{}_{}".format(h5_file_name.split("/")[-1], "boxes"), lambda: h5_file['boxes'])
-        h5_num_boxes = sharearray.cache("{}_{}".format(h5_file_name.split("/")[-1], "num_boxes"), lambda: h5_file['num_boxes'])
+        elif not text_only:
+            h5_features = h5_file_feature['image_features']
+
+        h5_boxes = sharearray.cache(
+            f'{h5_file_name.split("/")[-1]}_boxes', lambda: h5_file['boxes']
+        )
+        h5_num_boxes = sharearray.cache(
+            f'{h5_file_name.split("/")[-1]}_num_boxes',
+            lambda: h5_file['num_boxes'],
+        )
 
         if not args.get("kl_divergence", False):
-            h5_objects_id = sharearray.cache("{}_{}".format(h5_file_name.split("/")[-1], "object_ids"), lambda: np.array(h5_file['object_ids'])[:, :, 0]) #deepcopy(np.array(h5_file['object_ids'])[:, :, 0])
-            h5_objects_conf = sharearray.cache("{}_{}".format(h5_file_name.split("/")[-1], "object_pro"), lambda: np.array(h5_file['object_pro'])[:, :, 0]) #deepcopy(np.array(h5_file['object_pro'])[:, :, 0])
-            h5_attrs_id = sharearray.cache("{}_{}".format(h5_file_name.split("/")[-1], "attribute_ids"), lambda: np.array(h5_file['attribute_ids'])[:, :, 0]) #deepcopy(np.array(h5_file['attribute_ids'])[:, :, 0])
-            h5_attrs_conf = sharearray.cache("{}_{}".format(h5_file_name.split("/")[-1], "attribute_pro"), lambda: np.array(h5_file['attribute_pro'])[:, :, 0]) #deepcopy(np.array(h5_file['attribute_pro'])[:, :, 0])
+            h5_objects_id = sharearray.cache(
+                f'{h5_file_name.split("/")[-1]}_object_ids',
+                lambda: np.array(h5_file['object_ids'])[:, :, 0],
+            )
+            h5_objects_conf = sharearray.cache(
+                f'{h5_file_name.split("/")[-1]}_object_pro',
+                lambda: np.array(h5_file['object_pro'])[:, :, 0],
+            )
+            h5_attrs_id = sharearray.cache(
+                f'{h5_file_name.split("/")[-1]}_attribute_ids',
+                lambda: np.array(h5_file['attribute_ids'])[:, :, 0],
+            )
+            h5_attrs_conf = sharearray.cache(
+                f'{h5_file_name.split("/")[-1]}_attribute_pro',
+                lambda: np.array(h5_file['attribute_pro'])[:, :, 0],
+            )
         else:
             h5_objects_id = deepcopy(np.array(h5_file['object_ids']))
             h5_objects_conf = deepcopy(np.array(h5_file['object_pro']))
             h5_attrs_id = deepcopy(np.array(h5_file['attribute_ids']))
             h5_attrs_conf = deepcopy(np.array(h5_file['attribute_pro']))
         gc.collect()
-        
+
         img_h = deepcopy(np.array(h5_file['img_h'])).tolist()
         img_w = deepcopy(np.array(h5_file['img_w'])).tolist()
-        wh_list = []
-        for i in range(len(img_h)):
-            wh_list.append((img_w[i], img_h[i]))
-        
+        wh_list = [(img_w[i], img_h[i]) for i in range(len(img_h))]
         h5_file.close()
         del h5_file
         gc.collect()
@@ -364,23 +381,20 @@ class ImageFeatureDataset():
         h5_file = h5py.File(h5_file_name, "r")
 
         if on_memory:
-            print("Reading h5 {}".format(h5_file_name.replace("no_features", "features")))
+            print(f'Reading h5 {h5_file_name.replace("no_features", "features")}')
             h5_features = sharearray.cache(h5_file_name.replace("no_features", "features").split("/")[-1], lambda: h5_file_feature['image_features'])
             gc.collect()
         else:
             h5_features = h5_file_feature['image_features']
-        
+
         h5_boxes = deepcopy(np.array(h5_file['boxes']))
         h5_num_boxes = deepcopy(np.array(h5_file['num_boxes']))
         h5_objects_conf = h5_file['object_pro']
         h5_attrs_conf = h5_file['attribute_pro']
-        
+
         img_h = deepcopy(np.array(h5_file['img_h'])).tolist()
         img_w = deepcopy(np.array(h5_file['img_w'])).tolist()
-        wh_list = []
-        for i in range(len(img_h)):
-            wh_list.append((img_w[i], img_h[i]))
-        
+        wh_list = [(img_w[i], img_h[i]) for i in range(len(img_h))]
         h5_objects_id = np.zeros(len(wh_list)) # Place holder 
         h5_attrs_id = np.zeros(len(wh_list)) # Place holder 
 

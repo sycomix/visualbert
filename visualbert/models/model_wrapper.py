@@ -107,13 +107,28 @@ class ModelWrapper():
 
         no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
         optimizer_grouped_parameters = [
-            {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-            {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0} ]
+            {
+                'params': [
+                    p
+                    for n, p in param_optimizer
+                    if all(nd not in n for nd in no_decay)
+                ],
+                'weight_decay': 0.01,
+            },
+            {
+                'params': [
+                    p
+                    for n, p in param_optimizer
+                    if any(nd in n for nd in no_decay)
+                ],
+                'weight_decay': 0.0,
+            },
+        ]
 
         num_train_optimization_steps = int(
             train_dataset_length / args.train_batch_size / args.gradient_accumulation_steps) * args.num_train_epochs
         self.num_train_optimization_steps = num_train_optimization_steps
-        
+
 
         if args.get("fp16", False):
             try:
@@ -152,17 +167,21 @@ class ModelWrapper():
         load_state_dict_flexible(self.optimizer, state_dict_to_load["optimizer"])
 
     def state_dict(self):
-        if isinstance(self.model, DataParallel):
-            save_dict = {"model":self.model.module.state_dict(),
-                     "optimizer":self.optimizer.state_dict()}
-        else:
-            save_dict = {"model":self.model.state_dict(),
-                     "optimizer":self.optimizer.state_dict()}
-        return save_dict
+        return (
+            {
+                "model": self.model.module.state_dict(),
+                "optimizer": self.optimizer.state_dict(),
+            }
+            if isinstance(self.model, DataParallel)
+            else {
+                "model": self.model.state_dict(),
+                "optimizer": self.optimizer.state_dict(),
+            }
+        )
 
     def save_checkpoint(self, serialization_dir, epoch, val_metric_per_epoch, is_best = False):
         assert(serialization_dir)
-        model_path = os.path.join(serialization_dir, "model_state_epoch_{}.th".format(epoch))
+        model_path = os.path.join(serialization_dir, f"model_state_epoch_{epoch}.th")
         model_state = self.model.module.state_dict() if isinstance(self.model, DataParallel) else self.model.state_dict()
         torch.save(model_state, model_path)
 
@@ -170,18 +189,23 @@ class ModelWrapper():
                           'val_metric_per_epoch': val_metric_per_epoch,
                           'optimizer': self.optimizer.state_dict()
                           }
-        training_path = os.path.join(serialization_dir,
-                                     "training_state_epoch_{}.th".format(epoch))
+        training_path = os.path.join(
+            serialization_dir, f"training_state_epoch_{epoch}.th"
+        )
         torch.save(training_state, training_path)
 
         if is_best:
-            print("Best validation performance so far. Copying weights to '{}/best.th'.".format(serialization_dir))
+            print(
+                f"Best validation performance so far. Copying weights to '{serialization_dir}/best.th'."
+            )
             shutil.copyfile(model_path, os.path.join(serialization_dir, "best.th"))
 
     def save_checkpoint_step(self, serialization_dir, step, epoch, is_best = False):
         
         assert(serialization_dir)
-        model_path = os.path.join(serialization_dir, "model_step_{}_epoch_{}.th".format(step, epoch))
+        model_path = os.path.join(
+            serialization_dir, f"model_step_{step}_epoch_{epoch}.th"
+        )
         model_state = self.model.module.state_dict() if isinstance(self.model, DataParallel) else self.model.state_dict()
         torch.save(model_state, model_path)
 
@@ -190,8 +214,9 @@ class ModelWrapper():
                           'val_metric_per_epoch': None,
                           'optimizer': self.optimizer.state_dict()
                           }
-        training_path = os.path.join(serialization_dir,
-                                     "training_step_{}_epoch_{}.th".format(step, epoch))
+        training_path = os.path.join(
+            serialization_dir, f"training_step_{step}_epoch_{epoch}.th"
+        )
         torch.save(training_state, training_path)
 
     def restore_checkpoint(self, serialization_dir, epoch_to_load):

@@ -29,21 +29,17 @@ def heuristic_filter(box_a, box_b, image_size, threshhold = 0.15):
 
 def determine_box_position_type(box_a, box_b, image_size):
     if box_a[0] > box_b[2] or box_b[0] > box_a[2]:  # No overlap
-        # Then calculate their distance
-
-        if box_a[1] > box_b[3] or box_b[1] > box_a[3]: # y not overlap
-
+        if box_a[1] > box_b[3] or box_b[1] > box_a[3]:
             return ( "x, y not overlap",
             (min(abs(box_a[0] - box_b[2]), abs(box_b[0] - box_a[2])) / image_size[0]).item(),
-            
+
             (min(abs(box_a[0] - box_b[2]), abs(box_b[0] - box_a[2])) / min(abs(box_a[0] - box_a[2]), abs(box_b[0] - box_b[2]))).item(),
 
             (min(abs(box_a[0] - box_a[2]), abs(box_b[0] - box_b[2])) / image_size[0]).item()
             )
-        else:
-            overlap_length = min(abs(box_a[1] - box_b[3]), abs(box_b[1] - box_a[3]))
-            overlap_ratio = overlap_length / min(abs(box_a[1] - box_a[3]), abs(box_b[1] - box_b[3]))
-            return ("x not overlap, y overlap", min(overlap_ratio.item(), 1))
+        overlap_length = min(abs(box_a[1] - box_b[3]), abs(box_b[1] - box_a[3]))
+        overlap_ratio = overlap_length / min(abs(box_a[1] - box_a[3]), abs(box_b[1] - box_b[3]))
+        return ("x not overlap, y overlap", min(overlap_ratio.item(), 1))
     else:
         # there is overlap, calculate how much they overlap
         overlap_length = min(abs(box_a[0] - box_b[2]), abs(box_b[0] - box_a[2]))
@@ -58,23 +54,24 @@ def add_to_the_left_to_the_right_relation(box_a, box_b, image_size, y_overlap_ra
             return (True, box_a[0] > box_b[2]) # a is to the right of b, if box_a[0] > box_b[2]
         else:
             return (False, box_a[0] > box_b[2]) '''
-        if box_a[1] > box_b[3] or box_b[1] > box_a[3]:  # y not overlap
+        if box_a[1] > box_b[3] or box_b[1] > box_a[3]:
             return (False, box_a[0] > box_b[2])
-        else:
-            overlap_length = min(abs(box_a[1] - box_b[3]), abs(box_b[1] - box_a[3]))
-            overlap_ratio = overlap_length / min(abs(box_a[1] - box_a[3]), abs(box_b[1] - box_b[3]))
-            if overlap_ratio > y_overlap_ratio_thresh:
-                return (True, box_a[0] > box_b[0])
-            else:
-                return (False, box_a[0] > box_b[0])
+        overlap_length = min(abs(box_a[1] - box_b[3]), abs(box_b[1] - box_a[3]))
+        overlap_ratio = overlap_length / min(abs(box_a[1] - box_a[3]), abs(box_b[1] - box_b[3]))
+        return (
+            (True, box_a[0] > box_b[0])
+            if overlap_ratio > y_overlap_ratio_thresh
+            else (False, box_a[0] > box_b[0])
+        )
     else:
         # there is overlap, calculate how much they overlap
         overlap_length = min(abs(box_a[0] - box_b[2]), abs(box_b[0] - box_a[2]))
         overlap_ratio = overlap_length / min(abs(box_a[0] - box_a[2]), abs(box_b[0] - box_b[2]))
-        if overlap_ratio < x_overlap_ratio_thresh:
-            return (True, box_a[0] > box_b[0])
-        else:
-            return (False, box_a[0] > box_b[0])
+        return (
+            (True, box_a[0] > box_b[0])
+            if overlap_ratio < x_overlap_ratio_thresh
+            else (False, box_a[0] > box_b[0])
+        )
 
 # implementation from https://github.com/kuangliu/torchcv/blob/master/torchcv/utils/box.py
 # with slight modifications
@@ -94,7 +91,8 @@ def boxlist_iou(boxlist1, boxlist2):
     """
     if boxlist1.size != boxlist2.size:
         raise RuntimeError(
-                "boxlists should have same image size, got {}, {}".format(boxlist1, boxlist2))
+            f"boxlists should have same image size, got {boxlist1}, {boxlist2}"
+        )
     boxlist1 = boxlist1.convert("xyxy")
     boxlist2 = boxlist2.convert("xyxy")
     N = len(boxlist1)
@@ -113,8 +111,7 @@ def boxlist_iou(boxlist1, boxlist2):
     wh = (rb - lt + TO_REMOVE).clamp(min=0)  # [N,M,2]
     inter = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
 
-    iou = inter / (area1[:, None] + area2 - inter)
-    return iou
+    return inter / (area1[:, None] + area2 - inter)
 
 
 ###########################################################################

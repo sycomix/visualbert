@@ -11,22 +11,19 @@ def filter_examples(filename, balanced):
         identifier = example["identifier"]
         label = example["label"]
         if urls not in pair_labels:
-            pair_labels[urls] = list()
+            pair_labels[urls] = []
         pair_labels[urls].append((identifier, label))
 
-    filtered_ids = list()
+    filtered_ids = []
     num_appearing_more_than_once = 0
-    for urls, examples in pair_labels.items():
+    for examples in pair_labels.values():
         if len(examples) > 1:
             num_appearing_more_than_once += len(examples)
-            if balanced and len(set([item[1] for item in examples])) > 1:
-                for item in examples:
-                    filtered_ids.append(item)
-            elif not balanced and len(set(item[1] for item in examples)) == 1:
-                for item in examples:
-                    filtered_ids.append(item)
-
-    print('Filtered dataset ' + str(filename) + ' with balanced=' + str(balanced))
+            if balanced and len({item[1] for item in examples}) > 1:
+                filtered_ids.extend(iter(examples))
+            elif not balanced and len({item[1] for item in examples}) == 1:
+                filtered_ids.extend(iter(examples))
+    print(f'Filtered dataset {str(filename)} with balanced={str(balanced)}')
     print('A total of %d pairs occur more than once' % num_appearing_more_than_once)
     print('Found %d valid examples' % len(filtered_ids))
     percent_true = len([example for example in filtered_ids if example[1].lower() == "true"]) / float(len(filtered_ids))
@@ -35,7 +32,7 @@ def filter_examples(filename, balanced):
     only_ids = [item[0] for item in filtered_ids]
 
     bal_str = "balanced" if balanced else "unbalanced"
-    with open(os.path.join(bal_str, bal_str + '_' + filename), "w") as ofile:
+    with open(os.path.join(bal_str, f'{bal_str}_{filename}'), "w") as ofile:
         for example in original_examples:
             if example["identifier"] in only_ids:
                 ofile.write(json.dumps(example) + '\n')

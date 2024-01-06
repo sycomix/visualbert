@@ -115,10 +115,12 @@ class VQA:
                 for qid, l in zip(ques_id, label.cpu().numpy()):
                     ans = dset.label2ans[l]
                     quesid2ans[qid] = ans
-                
+
                 if i % report_every == 0 and i > 0:
-                    print("Epoch: {}, Iter: {}/{}".format(epoch, i, len(loader)))
-                    print("    {}\n~~~~~~~~~~~~~~~~~~\n".format(pd.DataFrame(train_results[-report_every:]).mean()))
+                    print(f"Epoch: {epoch}, Iter: {i}/{len(loader)}")
+                    print(
+                        f"    {pd.DataFrame(train_results[-report_every:]).mean()}\n~~~~~~~~~~~~~~~~~~\n"
+                    )
 
             log_str = "\nEpoch %d: Train %0.2f\n" % (epoch, evaluator.evaluate(quesid2ans) * 100.)
 
@@ -129,9 +131,9 @@ class VQA:
                     self.save("BEST")
 
                 log_str += "Epoch %d: Valid %0.2f\n" % (epoch, valid_score * 100.) + \
-                           "Epoch %d: Best %0.2f\n" % (epoch, best_valid * 100.)
+                               "Epoch %d: Best %0.2f\n" % (epoch, best_valid * 100.)
             if epoch >= 5:
-                self.save("Epoch{}".format(epoch))
+                self.save(f"Epoch{epoch}")
             print(log_str, end='')
             print(args.output)
 
@@ -149,7 +151,7 @@ class VQA:
         self.model.eval()
         dset, loader, evaluator = eval_tuple
         quesid2ans = {}
-        for i, batch in enumerate(tqdm(loader)):
+        for batch in tqdm(loader):
             _ = list(zip(*batch))
             ques_id, feats, boxes, sent, tags = _[:5]#, target = zip(*batch)
             with torch.no_grad():
@@ -172,7 +174,7 @@ class VQA:
     def oracle_score(data_tuple):
         dset, loader, evaluator = data_tuple
         quesid2ans = {}
-        for i, (ques_id, feats, boxes, sent, target) in enumerate(loader):
+        for ques_id, feats, boxes, sent, target in loader:
             _, label = target.max(1)
             for qid, l in zip(ques_id, label.cpu().numpy()):
                 ans = dset.label2ans[l]
@@ -180,12 +182,11 @@ class VQA:
         return evaluator.evaluate(quesid2ans)
 
     def save(self, name):
-        torch.save(self.model.state_dict(),
-                   os.path.join(self.output, "%s.pth" % name))
+        torch.save(self.model.state_dict(), os.path.join(self.output, f"{name}.pth"))
 
     def load(self, path):
-        print("Load model from %s" % path)
-        state_dict = torch.load("%s.pth" % path)
+        print(f"Load model from {path}")
+        state_dict = torch.load(f"{path}.pth")
         self.model.load_state_dict(state_dict)
 
 
@@ -217,7 +218,7 @@ if __name__ == "__main__":
             )
             print(result)
         else:
-            assert False, "No such test option for %s" % args.test
+            assert False, f"No such test option for {args.test}"
     else:
         print('Splits in Train data:', vqa.train_tuple.dataset.splits)
         if vqa.valid_tuple is not None:

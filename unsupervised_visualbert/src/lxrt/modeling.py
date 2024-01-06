@@ -60,13 +60,13 @@ def load_tf_weights_in_bert(model, tf_checkpoint_path):
             "https://www.tensorflow.org/install/ for installation instructions.")
         raise
     tf_path = os.path.abspath(tf_checkpoint_path)
-    print("Converting TensorFlow checkpoint from {}".format(tf_path))
+    print(f"Converting TensorFlow checkpoint from {tf_path}")
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
     names = []
     arrays = []
     for name, shape in init_vars:
-        print("Loading TF weight {} with shape {}".format(name, shape))
+        print(f"Loading TF weight {name} with shape {shape}")
         array = tf.train.load_variable(tf_path, name)
         names.append(name)
         arrays.append(array)
@@ -76,7 +76,7 @@ def load_tf_weights_in_bert(model, tf_checkpoint_path):
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
         if any(n in ["adam_v", "adam_m"] for n in name):
-            print("Skipping {}".format("/".join(name)))
+            print(f'Skipping {"/".join(name)}')
             continue
         pointer = model
         for m_name in name:
@@ -84,12 +84,14 @@ def load_tf_weights_in_bert(model, tf_checkpoint_path):
                 l = re.split(r'_(\d+)', m_name)
             else:
                 l = [m_name]
-            if l[0] == 'kernel' or l[0] == 'gamma':
+            if (
+                l[0] in ['kernel', 'gamma']
+                or l[0] not in ['output_bias', 'beta']
+                and l[0] == 'output_weights'
+            ):
                 pointer = getattr(pointer, 'weight')
-            elif l[0] == 'output_bias' or l[0] == 'beta':
+            elif l[0] in ['output_bias', 'beta']:
                 pointer = getattr(pointer, 'bias')
-            elif l[0] == 'output_weights':
-                pointer = getattr(pointer, 'weight')
             else:
                 pointer = getattr(pointer, l[0])
             if len(l) >= 2:
@@ -104,7 +106,7 @@ def load_tf_weights_in_bert(model, tf_checkpoint_path):
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
-        print("Initialize PyTorch weight {}".format(name))
+        print(f"Initialize PyTorch weight {name}")
         pointer.data = torch.from_numpy(array)
     return model
 
@@ -161,10 +163,7 @@ class VisualConfig(object):
         self.attr_id_num = 400
 
         self.visual_losses = self.VISUAL_LOSSES
-        weight = 1 / 0.15
-        if args.get("weight_disable", False):
-            weight = 1.0
-        
+        weight = 1.0 if args.get("weight_disable", False) else 1 / 0.15
         ce_or_kl = "kl" if args.get("kl_divergence", False) else "ce"
         self.visual_loss_config = {
             'obj': (self.obj_id_num, ce_or_kl, (-1,), weight),
@@ -269,8 +268,7 @@ class BertConfig(object):
 
     def to_dict(self):
         """Serializes this instance to a Python dictionary."""
-        output = copy.deepcopy(self.__dict__)
-        return output
+        return copy.deepcopy(self.__dict__)
 
     def to_json_string(self):
         """Serializes this instance to a JSON string."""
@@ -425,8 +423,7 @@ class BertCrossattLayer(nn.Module):
 
     def forward(self, input_tensor, ctx_tensor, ctx_att_mask=None):
         output = self.att(input_tensor, ctx_tensor, ctx_att_mask)
-        attention_output = self.output(output, input_tensor)
-        return attention_output
+        return self.output(output, input_tensor)
 
 
 class BertSelfattLayer(nn.Module):
@@ -438,8 +435,7 @@ class BertSelfattLayer(nn.Module):
     def forward(self, input_tensor, attention_mask):
         # Self attention attends to itself, thus keys and querys are the same (input_tensor).
         self_output = self.self(input_tensor, input_tensor, attention_mask)
-        attention_output = self.output(self_output, input_tensor)
-        return attention_output
+        return self.output(self_output, input_tensor)
 
 
 class BertIntermediate(nn.Module):
@@ -586,7 +582,7 @@ class BertEmbeddingsWithVisualEmbedding(nn.Module):
                 tag_position_ids = torch.arange(visual_tags.size(1), dtype=torch.long, device=visual_tags.device)
                 tag_position_ids = tag_position_ids.unsqueeze(0).expand_as(visual_tags)
                 tag_type_ids = torch.ones_like(visual_tags)
-                
+
                 tag_position_embeddings = self.position_embeddings_visual(tag_position_ids)
                 tag_type_embeddings = self.token_type_embeddings_visual(tag_type_ids)
                 tag_embeddings = tag_embeddings + tag_position_embeddings + tag_type_embeddings
@@ -621,14 +617,10 @@ class BertEmbeddingsWithVisualEmbedding(nn.Module):
             if not self.joint_layer_norm:
                 x = self.visn_layer_norm(x)
                 y = self.box_layer_norm(y)
-            if not self.disable_divide_2:
-                v_embeddings = (x + y) / 2
-            else:
-                v_embeddings = x + y
-            
+            v_embeddings = (x + y) / 2 if not self.disable_divide_2 else x + y
             #if visual_embeddings_type is not None:
             #    assert(self.use_segment_embedding_for_vision_and_tag)
-            
+
             if self.use_segment_embedding_for_vision_and_tag:
                 if visual_embeddings_type is None:
                     visual_embeddings_type = torch.zeros(*visual_embeddings.size()[:-1], dtype=torch.long).cuda()
@@ -734,7 +726,7 @@ class VisualFeatEncoder(nn.Module):
 
     def forward(self, visn_input):
         # This is when we do not have the box_fc yet
-        if isinstance(visn_input, tuple) or isinstance(visn_input, list):
+        if isinstance(visn_input, (tuple, list)):
             feats, boxes = visn_input
             x = self.visn_fc(feats)
             x = self.visn_layer_norm(x)
@@ -753,9 +745,7 @@ class VisualFeatEncoder(nn.Module):
 def _cat_with_none(feat_1, feat_2, dim):
     if feat_1 is None:
         return feat_2
-    if feat_2 is None:
-        return feat_1
-    return torch.cat((feat_1, feat_2), dim=dim)
+    return feat_1 if feat_2 is None else torch.cat((feat_1, feat_2), dim=dim)
 
 def _split_with_none(lang_feats, visn_feats, joint_feats):
     if lang_feats is None:
@@ -790,10 +780,10 @@ class LXRTEncoder(nn.Module):
                 _config.num_attention_heads = 1
                 #layers += [BertLayer(_config)]
                 self.additional_layer = BertLayer(_config)
-            
-                print("\n\n!! Has {} layers".format(len(self.layer) + 1))
+
+                print(f"\n\n!! Has {len(self.layer) + 1} layers")
             else:
-                print("\n\n!! Has {} layers".format(len(self.layer)))
+                print(f"\n\n!! Has {len(self.layer)} layers")
             return
         # Layers
         # Using self.layer instead of self.l_layer to support loading BERT weights.
@@ -804,13 +794,13 @@ class LXRTEncoder(nn.Module):
         print(args.additional_attention_layer)
         assert(0)
         if args.get("additional_attention_layer", False):
-            
+
             _config = copy.deepcopy(config)
             _config.intermediate_size = 768
             layers += [BertLayer(_config)]
 
         self.layer = nn.ModuleList(layers)
-        print("\n\n!! Has {} layers".format(len(self.layer)))
+        print(f"\n\n!! Has {len(self.layer)} layers")
 
         self.x_layers = nn.ModuleList(
             [LXRTXLayer(config) for _ in range(self.num_x_layers)]
@@ -990,10 +980,10 @@ class BertVisualObjHead(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
-        output = {}
-        for key in self.visual_losses:
-            output[key] = self.decoder_dict[key](hidden_states)
-        return output
+        return {
+            key: self.decoder_dict[key](hidden_states)
+            for key in self.visual_losses
+        }
 
 
 class BertPreTrainingHeads(nn.Module):
@@ -1025,11 +1015,8 @@ class BertPreTrainedModel(nn.Module):
         super(BertPreTrainedModel, self).__init__()
         if not isinstance(config, BertConfig):
             raise ValueError(
-                "Parameter config in `{}(config)` should be an instance of class `BertConfig`. "
-                "To create a model from a Google pretrained model use "
-                "`model = {}.from_pretrained(PRETRAINED_MODEL_NAME)`".format(
-                    self.__class__.__name__, self.__class__.__name__
-                ))
+                f"Parameter config in `{self.__class__.__name__}(config)` should be an instance of class `BertConfig`. To create a model from a Google pretrained model use `model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
+            )
         self.config = config
 
     def init_bert_weights(self, module):
@@ -1164,17 +1151,18 @@ class BertPreTrainedModel(nn.Module):
             for name, child in module._modules.items():
                 if child is not None:
                     load(child, prefix + name + '.')
+
         start_prefix = ''
         if not hasattr(model, 'bert') and any(s.startswith('bert.') for s in state_dict.keys()):
             start_prefix = 'bert.'
         load(model, prefix=start_prefix)
-        if len(missing_keys) > 0:
-             logger.info("Weights of {} not initialized from pretrained model: {}".format(
-                 model.__class__.__name__, missing_keys))
-        if len(unexpected_keys) > 0:
-             logger.info("Weights from pretrained model not used in {}: {}".format(
-                 model.__class__.__name__, unexpected_keys))
-        if len(error_msgs) > 0:
+        if missing_keys:
+            logger.info("Weights of {} not initialized from pretrained model: {}".format(
+                model.__class__.__name__, missing_keys))
+        if unexpected_keys:
+            logger.info("Weights from pretrained model not used in {}: {}".format(
+                model.__class__.__name__, unexpected_keys))
+        if error_msgs:
             raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
                                model.__class__.__name__, "\n\t".join(error_msgs)))
         return model

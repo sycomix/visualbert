@@ -85,33 +85,9 @@ class InputFeatures(object):
     def convert_one_example_to_features(cls, example, tokenizer):
         # note, this is different because weve already tokenized
         tokens_a = example.text_a
-        # tokens_b = example.text_b
-        tokens_b = None
-        if example.text_b:
-            tokens_b = example.text_b
-
-        # The convention in BERT is:
-        # (a) For sequence pairs:
-        #  tokens:   [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]
-        #  type_ids: 0     0  0    0    0     0       0 0     1  1  1  1   1 1
-        # (b) For single sequences:
-        #  tokens:   [CLS] the dog is hairy . [SEP]
-        #  type_ids: 0     0   0   0  0     0 0
-        #
-        # Where "type_ids" are used to indicate whether this is the first
-        # sequence or the second sequence. The embedding vectors for `type=0` and
-        # `type=1` were learned during pre-training and are added to the wordpiece
-        # embedding vector (and position vector). This is not *strictly* necessary
-        # since the [SEP] token unambiguously separates the sequences, but it makes
-        # it easier for the model to learn the concept of sequences.
-        #
-        # For classification tasks, the first vector (corresponding to [CLS]) is
-        # used as as the "sentence vector". Note that this only makes sense because
-        # the entire model is fine-tuned.
-        tokens = []
-        input_type_ids = []
-        tokens.append("[CLS]")
-        input_type_ids.append(0)
+        tokens_b = example.text_b if example.text_b else None
+        tokens = ["[CLS]"]
+        input_type_ids = [0]
         for token in tokens_a:
             tokens.append(token)
             input_type_ids.append(0)
@@ -144,11 +120,10 @@ class InputFeatures(object):
         # This one does not pad
         max_len = 0
         features = []
-        for (ex_index, example) in enumerate(examples):
+        for example in examples:
             feature = cls.convert_one_example_to_features(example, tokenizer)
 
-            if max_len < len(feature.input_ids):
-                max_len = len(feature.input_ids)
+            max_len = max(max_len, len(feature.input_ids))
             features.append(feature)
 
         for i in features:
@@ -181,9 +156,7 @@ class InputFeatures(object):
         """
         tokens_a = example.text_a
 
-        tokens_b = None
-        if example.text_b:
-            tokens_b = example.text_b
+        tokens_b = example.text_b if example.text_b else None
         # Modifies `tokens_a` and `tokens_b` in place so that the total
         # length is less than the specified length.
         # Account for [CLS], [SEP], [SEP] with "- 3"
@@ -198,28 +171,8 @@ class InputFeatures(object):
         else:
             lm_label_ids = ([-1] + t1_label + [-1])
 
-        # The convention in BERT is:
-        # (a) For sequence pairs:
-        #  tokens:   [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]
-        #  type_ids: 0   0  0    0    0     0       0 0    1  1  1  1   1 1
-        # (b) For single sequences:
-        #  tokens:   [CLS] the dog is hairy . [SEP]
-        #  type_ids: 0   0   0   0  0     0 0
-        #
-        # Where "type_ids" are used to indicate whether this is the first
-        # sequence or the second sequence. The embedding vectors for `type=0` and
-        # `type=1` were learned during pre-training and are added to the wordpiece
-        # embedding vector (and position vector). This is not *strictly* necessary
-        # since the [SEP] token unambigiously separates the sequences, but it makes
-        # it easier for the model to learn the concept of sequences.
-        #
-        # For classification tasks, the first vector (corresponding to [CLS]) is
-        # used as as the "sentence vector". Note that this only makes sense because
-        # the entire model is fine-tuned.
-        tokens = []
-        segment_ids = []
-        tokens.append("[CLS]")
-        segment_ids.append(0)
+        tokens = ["[CLS]"]
+        segment_ids = [0]
         for token in tokens_a:
             tokens.append(token)
             segment_ids.append(0)
@@ -345,16 +298,14 @@ class dim_3_reader:
     def read(self, image_feat_path):
         tmp = np.load(image_feat_path)
         _, _, c_dim = tmp.shape
-        image_feat = np.reshape(tmp, (-1, c_dim))
-        return image_feat
+        return np.reshape(tmp, (-1, c_dim))
 
 class HWC_feat_reader:
     def read(self, image_feat_path):
         tmp = np.load(image_feat_path)
         assert (tmp.shape[0] == 1), "batch is not 1"
         _, _, _, c_dim = tmp.shape
-        image_feat = np.reshape(tmp, (-1, c_dim))
-        return image_feat
+        return np.reshape(tmp, (-1, c_dim))
 
 class padded_faster_RCNN_feat_reader:
     def __init__(self, max_loc):
@@ -364,7 +315,7 @@ class padded_faster_RCNN_feat_reader:
         image_feat = np.load(image_feat_path)
         image_loc, image_dim = image_feat.shape
         tmp_image_feat = np.zeros((self.max_loc, image_dim), dtype=np.float32)
-        tmp_image_feat[0:image_loc, ] = image_feat
+        tmp_image_feat[:image_loc] = image_feat
         image_feat = tmp_image_feat
         return (image_feat, image_loc)
 
@@ -379,9 +330,9 @@ class padded_faster_RCNN_with_bbox_feat_reader:
         image_loc, image_dim = tmp_image_feat.shape
         tmp_image_feat_2 = np.zeros((self.max_loc, image_dim),
                                     dtype=np.float32)
-        tmp_image_feat_2[0:image_loc, ] = tmp_image_feat
+        tmp_image_feat_2[:image_loc] = tmp_image_feat
         tmp_image_box = np.zeros((self.max_loc, 4), dtype=np.int32)
-        tmp_image_box[0:image_loc] = image_boxes
+        tmp_image_box[:image_loc] = image_boxes
 
         return (tmp_image_feat_2, image_loc, tmp_image_box)
 
@@ -389,7 +340,7 @@ class padded_faster_RCNN_with_bbox_feat_reader:
         image_feat = np.load(image_feat_path)
         image_loc, image_dim = image_feat.shape
         tmp_image_feat = np.zeros((self.max_loc, image_dim), dtype=np.float32)
-        tmp_image_feat[0:image_loc, ] = image_feat
+        tmp_image_feat[:image_loc] = image_feat
         image_feat = tmp_image_feat
         return (image_feat, image_loc)
 
@@ -400,19 +351,18 @@ def parse_npz_img_feat(feat):
 
 
 def get_image_feat_reader(ndim, channel_first, image_feat, max_loc=None):
-    if ndim == 2 or ndim == 0:
+    if ndim in [2, 0]:
         if max_loc is None:
             return faster_RCNN_feat_reader()
+        if isinstance(image_feat.item(0), dict):
+            return padded_faster_RCNN_with_bbox_feat_reader(max_loc)
         else:
-            if isinstance(image_feat.item(0), dict):
-                return padded_faster_RCNN_with_bbox_feat_reader(max_loc)
-            else:
-                return padded_faster_RCNN_feat_reader(max_loc)
+            return padded_faster_RCNN_feat_reader(max_loc)
     elif ndim == 3 and not channel_first:
         return dim_3_reader()
     elif ndim == 4 and channel_first:
         return CHW_feat_reader()
-    elif ndim == 4 and not channel_first:
+    elif ndim == 4:
         return HWC_feat_reader()
     else:
         raise TypeError("unkown image feature format")
@@ -438,22 +388,18 @@ def read_in_image_feats(image_dirs, image_readers, image_file_name):
     return image_feats
 
 def get_one_image_feature(path, reader, image_feature_cap):
-        image_feat = reader.read(path)
-        image_loc = image_feat[1]
-        if len(image_feat) == 3:
-            image_boxes = image_feat[2]
-        else:
-            image_boxes = None
+    image_feat = reader.read(path)
+    image_loc = image_feat[1]
+    image_boxes = image_feat[2] if len(image_feat) == 3 else None
+    returned_feat = image_feat[0]
+    if image_feature_cap != -1:
+        if image_feature_cap < image_loc:
+            returned_feat = returned_feat[:image_feature_cap, :]
+            if image_boxes is not None:
+                image_boxes = image_boxes[:image_feature_cap]
+            image_loc = image_feature_cap
 
-        returned_feat = image_feat[0]
-        if image_feature_cap != -1:
-            if image_feature_cap < image_loc:
-                returned_feat = returned_feat[:image_feature_cap, :]
-                if image_boxes is not None:
-                    image_boxes = image_boxes[:image_feature_cap]
-                image_loc = image_feature_cap
-
-        return returned_feat, image_boxes, image_loc
+    return returned_feat, image_boxes, image_loc
 
 def get_one_image_feature_npz_screening_parameters(path, reader, image_screening_parameters, return_confidence = False):
         result = reader.read(path)

@@ -53,7 +53,7 @@ class VQAModel(nn.Module):
         """
         #x = self.lxrt_encoder(sent, (feat, pos))
         input_ids, input_mask, segment_ids = convert_sents_to_features_tensors(sent, max_seq_length = MAX_VQA_LENGTH, tokenizer=self.tokenizer)
-        
+
         visual_tags, visual_tags_mask, visual_tags_box, visual_tags_type, visual_tags_segment_ids = convert_tags_to_tensorts(tags)
 
         feat = pad_np_arrays(feat, padding_value=0, dtype=np.float32)
@@ -66,8 +66,6 @@ class VQAModel(nn.Module):
                 visual_feats_seg_ids=None,
                 visual_tags=visual_tags, visual_tags_mask=visual_tags_mask, visual_tags_box=visual_tags_box, visual_tags_type=visual_tags_type, visual_tags_segment_ids=visual_tags_segment_ids,
                 )
-        logit = self.logit_fc(pooled_output)
-
-        return logit
+        return self.logit_fc(pooled_output)
 
 

@@ -20,7 +20,7 @@ with open(sys.argv[2]) as infile:
     for example in examples:
         lines = example.split('\n')
         sent = lines[0]
-        sent_to_annot[sent] = list()
+        sent_to_annot[sent] = []
         for category in lines[1:]:
             category = category[2:]
             sent_to_annot[sent].append(category)
@@ -29,7 +29,7 @@ with open(sys.argv[2]) as infile:
 print('Found %d categories.' % len(categories))
 category_corrects = dict()
 for category in categories:
-    category_corrects[category] = list()
+    category_corrects[category] = []
 
 # Labels file
 with open(sys.argv[3]) as infile:
@@ -44,8 +44,8 @@ with open(sys.argv[3]) as infile:
         if assignment in {'true', 'false'}:
             correct = int(assignment == label)
         else:
-            raise ValueError('Assignment is not true/false: ' + assignment)
-        
+            raise ValueError(f'Assignment is not true/false: {assignment}')
+
         if sentence in sent_to_annot:
             categories = sent_to_annot[sentence]
 
@@ -54,4 +54,8 @@ with open(sys.argv[3]) as infile:
 
 print('Per-category accuracy:')
 for category, corrects in sorted(category_corrects.items(), key = lambda x: x[0]):
-    print(category + ': ' + '{0:.2f}'.format(100. * np.mean(np.array(corrects))) + ' (of %d examples)' % len(corrects))
+    print(
+        f'{category}: '
+        + '{0:.2f}'.format(100.0 * np.mean(np.array(corrects)))
+        + ' (of %d examples)' % len(corrects)
+    )

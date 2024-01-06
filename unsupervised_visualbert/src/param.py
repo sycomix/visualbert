@@ -27,7 +27,7 @@ def get_optimizer(optim):
     elif 'bert' in optim:
         optimizer = 'bert'      # The bert optimizer will be bind later.
     else:
-        assert False, "Please add your optimizer %s in the list." % optim
+        assert False, f"Please add your optimizer {optim} in the list."
 
     return optimizer
 
@@ -97,7 +97,7 @@ def parse_args():
     parser.add_argument("--config-file", dest="config-file", default=None, type=str)
     parser.add_argument("--algorithm", dest="algorithm", default=None, type=str)
     parser.add_argument("--save_path", dest="save_path", default=None, type=str)
-    
+
     # Parse the arguments.
     args = parser.parse_args()
 
@@ -132,10 +132,10 @@ def parse_args():
     import sys
     run_log_counter = 0
 
-    while(os.path.exists(args.output + '/run_{}.log'.format(run_log_counter))):
+    while os.path.exists(f'{args.output}/run_{run_log_counter}.log'):
         run_log_counter += 1
 
-    file_log = open(args.output + '/run_{}.log'.format(run_log_counter),'w')  # File where you need to keep the logs
+    file_log = open(f'{args.output}/run_{run_log_counter}.log', 'w')
     file_log.write("")
     class Unbuffered:
         def __init__(self, stream):
@@ -153,7 +153,7 @@ def parse_args():
     print("\n\n\n\n")
     with open(args.config) as f:
         print(f.read())
-    
+
     return args
 
 

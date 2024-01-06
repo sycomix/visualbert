@@ -24,24 +24,26 @@ EPS = 1e-7
 
 
 def assert_eq(real, expected):
-    assert real == expected, '%s (true) vs %s (expected)' % (real, expected)
+    assert real == expected, f'{real} (true) vs {expected} (expected)'
 
 
 def assert_array_eq(real, expected):
-    assert (np.abs(real-expected) < EPS).all(), \
-        '%s (true) vs %s (expected)' % (real, expected)
+    assert (
+        np.abs(real - expected) < EPS
+    ).all(), f'{real} (true) vs {expected} (expected)'
 
 def assert_tensor_eq(real, expected, eps=EPS):
-    assert (torch.abs(real-expected) < eps).all(), \
-        '%s (true) vs %s (expected)' % (real, expected)
+    assert (
+        torch.abs(real - expected) < eps
+    ).all(), f'{real} (true) vs {expected} (expected)'
 
 
 def load_folder(folder, suffix):
-    imgs = []
-    for f in sorted(os.listdir(folder)):
-        if f.endswith(suffix):
-            imgs.append(os.path.join(folder, f))
-    return imgs
+    return [
+        os.path.join(folder, f)
+        for f in sorted(os.listdir(folder))
+        if f.endswith(suffix)
+    ]
 
 
 def load_imageid(folder):
@@ -62,13 +64,13 @@ def pil_loader(path):
 def weights_init(m):
     """custom weights initialization."""
     cname = m.__class__
-    if cname == nn.Linear or cname == nn.Conv2d or cname == nn.ConvTranspose2d:
+    if cname in [nn.Linear, nn.Conv2d, nn.ConvTranspose2d]:
         m.weight.data.normal_(0.0, 0.02)
     elif cname == nn.BatchNorm2d:
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
     else:
-        print('%s is not initialized.' % cname)
+        print(f'{cname} is not initialized.')
 
 
 def init_net(net, net_file):
@@ -89,9 +91,9 @@ def create_dir(path):
 
 def print_model(model, logger):
     print(model)
-    nParams = 0
-    for w in model.parameters():
-        nParams += functools.reduce(operator.mul, w.size(), 1)
+    nParams = sum(
+        functools.reduce(operator.mul, w.size(), 1) for w in model.parameters()
+    )
     if logger:
         logger.write('nParams=\t'+str(nParams))
 
@@ -114,8 +116,7 @@ def save_model(path, model, epoch, optimizer=None):
 def rho_select(pad, lengths):
     # Index of the last output for each sequence.
     idx_ = (lengths-1).view(-1,1).expand(pad.size(0), pad.size(2)).unsqueeze(1)
-    extracted = pad.gather(1, idx_).squeeze(1)
-    return extracted
+    return pad.gather(1, idx_).squeeze(1)
 
 
 def trim_collate(batch):
@@ -125,8 +126,8 @@ def trim_collate(batch):
     elem_type = type(batch[0])
     if torch.is_tensor(batch[0]):
         out = None
-        if 1 < batch[0].dim(): # image features
-            max_num_boxes = max([x.size(0) for x in batch])
+        if batch[0].dim() > 1: # image features
+            max_num_boxes = max(x.size(0) for x in batch)
             if _use_shared_memory:
                 # If we're in a background process, concatenate directly into a
                 # shared memory tensor to avoid an extra copy
@@ -139,7 +140,7 @@ def trim_collate(batch):
             if _use_shared_memory:
                 # If we're in a background process, concatenate directly into a
                 # shared memory tensor to avoid an extra copy
-                numel = sum([x.numel() for x in batch])
+                numel = sum(x.numel() for x in batch)
                 storage = batch[0].storage()._new_shared(numel)
                 out = batch[0].new(storage)
             return torch.stack(batch, 0, out=out)
@@ -185,8 +186,10 @@ class Logger(object):
 
     def log(self, extra_msg=''):
         msgs = [extra_msg]
-        for key, vals in self.infos.iteritems():
-            msgs.append('%s %.6f' % (key, np.mean(vals)))
+        msgs.extend(
+            '%s %.6f' % (key, np.mean(vals))
+            for key, vals in self.infos.iteritems()
+        )
         msg = '\n'.join(msgs)
         self.log_file.write(msg + '\n')
         self.log_file.flush()
@@ -276,10 +279,10 @@ def calculate_area(obj):
     return (obj[2] - obj[0]) * (obj[3] - obj[1])
 
 def get_intersection(obj1, obj2):
-    left = obj1[0] if obj1[0] > obj2[0] else obj2[0]
-    top = obj1[1] if obj1[1] > obj2[1] else obj2[1]
-    right = obj1[2] if obj1[2] < obj2[2] else obj2[2]
-    bottom = obj1[3] if obj1[3] < obj2[3] else obj2[3]
+    left = max(obj1[0], obj2[0])
+    top = max(obj1[1], obj2[1])
+    right = min(obj1[2], obj2[2])
+    bottom = min(obj1[3], obj2[3])
     if left > right or top > bottom:
         return [0, 0, 0, 0]
     return [left, top, right, bottom]
@@ -297,5 +300,4 @@ def get_match_index(src_bboxes, dst_bboxes):
 # Batched index_select
 def batched_index_select(t, dim, inds):
     dummy = inds.unsqueeze(2).expand(inds.size(0), inds.size(1), t.size(2))
-    out = t.gather(dim, dummy) # b x e x f
-    return out
+    return t.gather(dim, dummy)

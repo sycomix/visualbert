@@ -12,25 +12,24 @@ GENDER_NEUTRAL_NAMES = ['Casey', 'Riley', 'Jessie', 'Jackie', 'Avery', 'Jaime', 
 ##################################################################################################
 
 def _fix_tokenization(tokenized_sent, obj_to_type, det_hist=None):
-    if det_hist is None:
-        det_hist = {}
-    else:
-        det_hist = {k: v for k, v in det_hist.items()}
-
+    det_hist = {} if det_hist is None else dict(det_hist.items())
     obj2count = defaultdict(int)
     # Comment this in if you want to preserve stuff from the earlier rounds.
     for v in det_hist.values():
         obj2count[v.split('_')[0]] += 1
 
     new_tokenization = []
-    for i, tok in enumerate(tokenized_sent):
+    for tok in tokenized_sent:
         if isinstance(tok, list):
             for int_name in tok:
                 if int_name not in det_hist:
-                    if obj_to_type[int_name] == 'person':
-                        det_hist[int_name] = GENDER_NEUTRAL_NAMES[obj2count['person'] % len(GENDER_NEUTRAL_NAMES)]
-                    else:
-                        det_hist[int_name] = obj_to_type[int_name]
+                    det_hist[int_name] = (
+                        GENDER_NEUTRAL_NAMES[
+                            obj2count['person'] % len(GENDER_NEUTRAL_NAMES)
+                        ]
+                        if obj_to_type[int_name] == 'person'
+                        else obj_to_type[int_name]
+                    )
                     obj2count[obj_to_type[int_name]] += 1
                 new_tokenization.append(det_hist[int_name])
         else:
@@ -108,7 +107,7 @@ def process_ctx_ans_for_bert(ctx_raw, ans_raw, tokenizer, counter, endingonly, m
 def data_iter(data_fn, tokenizer, max_seq_length, endingonly):
     counter = 0
     with open(data_fn, 'r') as f:
-        for line_no, line in enumerate(tqdm(f)):
+        for line in tqdm(f):
             item = json.loads(line)
             q_tokens, a_tokens = fix_item(item, rationales=False)
             qa_tokens, r_tokens = fix_item(item, answer_label=item['answer_label'], rationales=True)

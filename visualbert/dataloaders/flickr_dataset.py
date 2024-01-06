@@ -68,9 +68,10 @@ class Flickr30kFeatureDataset(Dataset):
 
         if self.use_visual_genome:
             self.img_id2idx = cPickle.load(
-                open(os.path.join(data_root, '%s_imgid2idx.pkl' % name), 'rb'))
+                open(os.path.join(data_root, f'{name}_imgid2idx.pkl'), 'rb')
+            )
 
-            h5_path = os.path.join(data_root, '%s.hdf5' % name)
+            h5_path = os.path.join(data_root, f'{name}.hdf5')
             with h5py.File(h5_path, 'r') as hf:
                 self.features = np.array(hf.get('image_features'))
                 self.spatials = np.array(hf.get('spatial_features'))
@@ -178,7 +179,7 @@ class Flickr30kFeatureDataset(Dataset):
                     target_tensor = torch.zeros(max_box).scatter_(0, target_idx, 1).unsqueeze(0)
                 target_tensors.append(target_tensor)
             assert len(target_tensors) <= max_entities, '> %d entities!' % max_entities
-            for i in range(max_entities - len(target_tensors)):
+            for _ in range(max_entities - len(target_tensors)):
                 target_tensor = torch.zeros(1, max_box)
                 target_tensors.append(target_tensor)
                 entry['entity_ids'].append(0)
@@ -214,13 +215,12 @@ class Flickr30kFeatureDataset(Dataset):
         else:
             spatials = None
 
-        sample = {}
-
         image_feat_variable = ArrayField(features)
         image_dim_variable = IntArrayField(np.array(len(features)))
-        sample["image_feat_variable"] = image_feat_variable
-        sample["image_dim_variable"] = image_dim_variable
-
+        sample = {
+            "image_feat_variable": image_feat_variable,
+            "image_dim_variable": image_dim_variable,
+        }
         tokenized_sentence, alignment = retokenize_with_alignment(sentence.split(" "), self.tokenizer)
 
         e_pos_after_subword = []
@@ -233,7 +233,7 @@ class Flickr30kFeatureDataset(Dataset):
 
         if len(e_pos_after_subword) != len(e_pos) or len(e_pos_after_subword) != len(target):
             assert(0)
-        
+
         # Need to convert target into soft scores:
         target_len = features.shape[0]
         new_target = []
@@ -260,13 +260,11 @@ class Flickr30kFeatureDataset(Dataset):
                         example = bert_example,
                         tokenizer=self.tokenizer,
                         probability = self.masked_lm_prob)
-            bert_feature.insert_field_into_dict(sample)
         else:
             bert_feature = InputFeatures.convert_one_example_to_features(
                     example = bert_example,
                     tokenizer=self.tokenizer)
-            bert_feature.insert_field_into_dict(sample)
-
+        bert_feature.insert_field_into_dict(sample)
         return Instance(sample)
 
     def __len__(self):
@@ -275,6 +273,5 @@ class Flickr30kFeatureDataset(Dataset):
     @staticmethod
     def collate_fn(data):
         batch = Batch(data)
-        td = batch.as_tensor_dict()
-        return td
+        return batch.as_tensor_dict()
 

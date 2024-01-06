@@ -52,16 +52,15 @@ class VQADataset(Dataset):
     def __init__(self, args, chunk_train = None, chunk_val = None): # Using args is not exactly a very good coding habit...
         super(VQADataset, self).__init__()
 
-        if isinstance(args.imdb_file, list) or isinstance(args.imdb_file, tuple): # For training dataset, the imdb_file is a list of strs, containing train and val:
+        if isinstance(args.imdb_file, (list, tuple)): # For training dataset, the imdb_file is a list of strs, containing train and val:
             imdb = np.load(args.imdb_file[0], allow_pickle = True)[1:]
             for i in args.imdb_file[1:]:
                 imdb_i = np.load(i, allow_pickle = True)[1:]
                 imdb = np.concatenate((imdb, imdb_i))
+        elif args.imdb_file.endswith('.npy'):
+            imdb = np.load(args.imdb_file, allow_pickle = True)[1:]
         else:
-            if args.imdb_file.endswith('.npy'):
-                imdb = np.load(args.imdb_file, allow_pickle = True)[1:]
-            else:
-                raise TypeError('unknown imdb format.')
+            raise TypeError('unknown imdb format.')
 
         self.items = imdb
         self.chunk_train = chunk_train
@@ -85,11 +84,11 @@ class VQADataset(Dataset):
         self.masked_lm_prob = args.get("masked_lm_prob", 0.15)
         self.tokenizer = BertTokenizer.from_pretrained(args["bert_model_name"], do_lower_case=args["do_lower_case"])
 
-        self.advanced_vqa = True if args.model.training_head_type == "vqa_advanced" else False
+        self.advanced_vqa = args.model.training_head_type == "vqa_advanced"
         if self.advanced_vqa:
-            tokenized_list = []
-            for i in self.answer_dict.word_list:
-                tokenized_list.append(self.tokenizer.tokenize(i))
+            tokenized_list = [
+                self.tokenizer.tokenize(i) for i in self.answer_dict.word_list
+            ]
             max_len = max(len(i) for i in tokenized_list)
             for index, i in enumerate(tokenized_list):
                 if len(i) < max_len:
@@ -125,16 +124,15 @@ class VQADataset(Dataset):
 
     def __getitem__(self, index):
 
-        iminfo = self.items[index] 
+        iminfo = self.items[index]
         image_feat_variable, image_boxes, image_dim_variable = self.get_image_features_by_training_index(index)
-
-        sample = {}
 
         image_feat_variable = ArrayField(image_feat_variable)
         image_dim_variable = IntArrayField(np.array(image_dim_variable))
-        sample["image_feat_variable"] = image_feat_variable
-        sample["image_dim_variable"] = image_dim_variable
-
+        sample = {
+            "image_feat_variable": image_feat_variable,
+            "image_dim_variable": image_dim_variable,
+        }
         answer = None
         valid_answers_idx = np.zeros((10), np.int32)
         valid_answers_idx.fill(-1)
@@ -168,10 +166,7 @@ class VQADataset(Dataset):
             subword_tokens.append("[SEP]")
             masked_lm_labels.append(-1)
 
-            input_ids = []
-            for i in subword_tokens:
-                input_ids.append(self.tokenizer.vocab[i])
-
+            input_ids = [self.tokenizer.vocab[i] for i in subword_tokens]
             bert_feature = InputFeatures(
                 unique_id = -1,
                 tokens = subword_tokens,
@@ -181,10 +176,9 @@ class VQADataset(Dataset):
                 is_correct = 1, 
                 lm_label_ids = masked_lm_labels
                 )
-            bert_feature.insert_field_into_dict(sample)
         else:
+            item = iminfo
             if self.pretraining:
-                item = iminfo
                 if self.no_next_sentence:
                     answer = answer
                     label = None
@@ -215,9 +209,7 @@ class VQADataset(Dataset):
                                 example = bert_example,
                                 tokenizer=self.tokenizer,
                                 probability = 0.15)'''
-                bert_feature.insert_field_into_dict(sample)
             else:
-                item = iminfo
                 subword_tokens = self.tokenizer.tokenize(" ".join(item['question_tokens']))
                 if self.no_next_sentence:
                     subword_tokens = subword_tokens + ["?", "[MASK]"] # We will use the last word to do predictio
@@ -227,8 +219,7 @@ class VQADataset(Dataset):
                     subwords_b = ["[MASK]"]
                 bert_example = InputExample(unique_id = -1, text_a = subword_tokens, text_b = subwords_b,max_seq_length = self.max_seq_length)
                 bert_feature = InputFeatures.convert_one_example_to_features(bert_example,tokenizer =self.tokenizer)
-                bert_feature.insert_field_into_dict(sample)
-
+        bert_feature.insert_field_into_dict(sample)
         if answer is not None:
             sample['label'] = ArrayField(np.array(answer_scores))
 
@@ -238,8 +229,7 @@ class VQADataset(Dataset):
     def collate_fn(data):
         if isinstance(data[0], Instance):
             batch = Batch(data)
-            td = batch.as_tensor_dict()
-            return td
+            return batch.as_tensor_dict()
 
     @classmethod
     def splits(cls, args):
@@ -325,8 +315,7 @@ class VocabDict:
         self.word_list = load_str_list(vocab_file)
         self.word2idx_dict = {w: n_w for n_w, w in enumerate(self.word_list)}
         self.num_vocab = len(self.word_list)
-        self.UNK_idx = (self.word2idx_dict['<unk>']
-                        if '<unk>' in self.word2idx_dict else None)
+        self.UNK_idx = self.word2idx_dict.get('<unk>', None)
 
     def idx2word(self, n_w):
         return self.word_list[n_w]
@@ -341,5 +330,4 @@ class VocabDict:
                              (while dictionary does not contain <unk>)' % w)
 
     def tokenize_and_index(self, sentence):
-        inds = [self.word2idx(w) for w in tokenize(sentence)]
-        return inds
+        return [self.word2idx(w) for w in tokenize(sentence)]

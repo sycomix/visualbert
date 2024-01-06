@@ -109,11 +109,11 @@ class VCR(Dataset):
 
         self.vcr_annots_dir = vcr_annots_dir
         self.vcr_image_dir = vcr_image_dir
-        with open(os.path.join(self.vcr_annots_dir, '{}.jsonl'.format(split)), 'r') as f:
+        with open(os.path.join(self.vcr_annots_dir, f'{split}.jsonl'), 'r') as f:
             self.items = [json.loads(s) for s in f]
 
         if split not in ('test', 'train', 'val'):
-            raise ValueError("Mode must be in test, train, or val. Supplied {}".format(mode))
+            raise ValueError(f"Mode must be in test, train, or val. Supplied {mode}")
 
         if mode not in ('answer', 'rationale'):
             raise ValueError("split must be answer or rationale")
@@ -140,23 +140,23 @@ class VCR(Dataset):
         self.complete_shuffle = complete_shuffle
 
         ##########
-        self.only_qar = True if self.mode=='rationale' else False
+        self.only_qar = self.mode == 'rationale'
 
         if answer_labels_path is not None:
             # Only when we are testing rationale...
             assert(self.only_qar)
 
             if answer_labels_path == 0:
-                for index, i in enumerate(self.items):
+                for i in self.items:
                     i["answer_label"] = 0
             elif answer_labels_path == 1:
-                for index, i in enumerate(self.items):
+                for i in self.items:
                     i["answer_label"] = 1
             elif answer_labels_path == 2:
-                for index, i in enumerate(self.items):
+                for i in self.items:
                     i["answer_label"] = 2
             elif answer_labels_path == 3:
-                for index, i in enumerate(self.items):
+                for i in self.items:
                     i["answer_label"] = 3
             else:
                 self.answer_labels = np.load(answer_labels_path)
@@ -175,7 +175,7 @@ class VCR(Dataset):
     @classmethod
     def splits(cls, **kwargs):
         """ Helper method to generate splits of the dataset"""
-        kwargs_copy = {x: y for x, y in kwargs.items()}
+        kwargs_copy = dict(kwargs)
         if 'mode' not in kwargs:
             kwargs_copy['mode'] = 'answer'
 
@@ -192,7 +192,7 @@ class VCR(Dataset):
                 return len(self.items) * 4
         return len(self.items)
 
-    def _get_dets_to_use(self, item, only_use_answer = False, only_use_qar = False): # Need to fix this match
+    def _get_dets_to_use(self, item, only_use_answer = False, only_use_qar = False):    # Need to fix this match
         """
         We might want to use fewer detectiosn so lets do so.
         :param item:
@@ -202,14 +202,14 @@ class VCR(Dataset):
         """
         # Load questions and answers
         question = item['question']
-        answer_choices = item['{}_choices'.format(self.mode)]
+        answer_choices = item[f'{self.mode}_choices']
 
         if self.mode == "answer":
             question = item['question']
-            answer_choices = item['{}_choices'.format(self.mode)]
+            answer_choices = item[f'{self.mode}_choices']
         elif self.mode == "rationale":
             question = item['question'] + item['answer_choices'][item['answer_label']]
-            answer_choices = item['{}_choices'.format(self.mode)]
+            answer_choices = item[f'{self.mode}_choices']
 
         if self.pretraining_include_qa_and_qar:
             answer_choices = item['answer_choices'] + item['rationale_choices']
@@ -262,26 +262,20 @@ class VCR(Dataset):
 
         ###################################################################
         # Load questions and answers
-        
-        answer_choices = item['{}_choices'.format(self.mode)]
 
-        if self.complete_shuffle and which < 4:
-            only_use_answer = True
-        else:
-            only_use_answer = False
+        answer_choices = item[f'{self.mode}_choices']
 
-        if self.complete_shuffle and which >= 4:
-            only_use_qar = True
-        else:
-            only_use_qar = False
-
+        only_use_answer = bool(self.complete_shuffle and which < 4)
+        only_use_qar = bool(self.complete_shuffle and which >= 4)
         dets2use, old_det_to_new_ind = self._get_dets_to_use(item, only_use_answer = only_use_answer, only_use_qar = only_use_qar)
 
         # The only_use_qar is ambigious...
 
         instance_dict = {}
         if self.split != 'test':
-            instance_dict['label'] = LabelField(item['{}_label'.format(self.mode)], skip_indexing=True)
+            instance_dict['label'] = LabelField(
+                item[f'{self.mode}_label'], skip_indexing=True
+            )
         instance_dict['metadata'] = MetadataField({'annot_id': item['annot_id'], 'ind': index, 'movie': item['movie'],
                                                    'img_fn': item['img_fn'],
                                                    'question_number': item['question_number']})
@@ -326,20 +320,20 @@ class VCR(Dataset):
             ######################
             examples_alginment_pack = []
             for i in range(len(examples)):
-                if self.pretraining_include_qa_and_qar:
-                    if i < 4:
-                        raw_text_a = item["question"]
-                        raw_text_b = item['answer_choices'][i]
-                    else:
-                        raw_text_a = item["question"] + item['answer_choices'][item['answer_label']]
-                        raw_text_b = item['rationale_choices'][i - 4]
-                elif self.only_qar:
-                    raw_text_a = item["question"] + item['answer_choices'][item['answer_label']] # This is the correct alignment right now.
-                    raw_text_b = item['rationale_choices'][i]
-                else:
+                if (
+                    self.pretraining_include_qa_and_qar
+                    and i < 4
+                    or not self.pretraining_include_qa_and_qar
+                    and not self.only_qar
+                ):
                     raw_text_a = item["question"]
                     raw_text_b = item['answer_choices'][i]
-
+                elif self.pretraining_include_qa_and_qar:
+                    raw_text_a = item["question"] + item['answer_choices'][item['answer_label']]
+                    raw_text_b = item['rationale_choices'][i - 4]
+                else:
+                    raw_text_a = item["question"] + item['answer_choices'][item['answer_label']] # This is the correct alignment right now.
+                    raw_text_b = item['rationale_choices'][i]
                 true_text_a = examples[i][0].text_a
                 true_text_b = examples[i][0].text_b
                 text_alignment_a = examples[i][1]
@@ -422,20 +416,18 @@ class VCR(Dataset):
                         tokenizer=self.tokenizer,
                         probability = self.masked_lm_prob)
                 features.append(example)
-            InputFeatures.convert_list_features_to_allennlp_list_feild(features, instance_dict)
-
         else:
             features = InputFeatures.convert_examples_to_features(
                     examples=[x[0] for x in examples],
-                    tokenizer=self.tokenizer)
-            InputFeatures.convert_list_features_to_allennlp_list_feild(features, instance_dict) 
+                    tokenizer=self.tokenizer) 
+
+        InputFeatures.convert_list_features_to_allennlp_list_feild(features, instance_dict) 
 
     @staticmethod
     def collate_fn(data):
         if isinstance(data[0], Instance):
             batch = Batch(data)
             td = batch.as_tensor_dict()
-            return td
         else:
             images, instances = zip(*data)
             images = torch.stack(images, 0)
@@ -451,7 +443,8 @@ class VCR(Dataset):
 
             td['box_mask'] = torch.all(td['boxes'] >= 0, -1).long()
             td['images'] = images
-            return td
+
+        return td
 
 
 class VCRLoader(torch.utils.data.DataLoader):
@@ -462,7 +455,7 @@ class VCRLoader(torch.utils.data.DataLoader):
 
     @classmethod
     def from_dataset(cls, data, batch_size=3, num_workers=6, num_gpus=3, **kwargs):
-        loader = cls(
+        return cls(
             dataset=data,
             batch_size=batch_size * num_gpus,
             shuffle=data.is_train,
@@ -472,4 +465,3 @@ class VCRLoader(torch.utils.data.DataLoader):
             pin_memory=False,
             **kwargs,
         )
-        return loader

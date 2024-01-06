@@ -10,7 +10,7 @@ with open(sys.argv[1]) as infile:
         preds[identifier] = assignment
 
 # Labels file
-corrects = list()
+corrects = []
 with open(sys.argv[2]) as infile:
     for line in infile:
         example = json.loads(line)

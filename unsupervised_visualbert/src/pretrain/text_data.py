@@ -26,7 +26,7 @@ class GeneralCorpusNP(Dataset):
         self.ann_file = ann_file
         self.encoding = encoding
         self.test_mode = False
-        
+
         self.do_no_fill = False
 
         self.use_mismatch_objective = args.get("task_matched", False)
@@ -41,7 +41,7 @@ class GeneralCorpusNP(Dataset):
                 self.corpus = self.load_corpus()
         if args.get("presegment_sentence", False):
             self.presegment_sentence()
-        print("Using {} with {} data.\n\n".format(self.ann_file, len(self)))
+        print(f"Using {self.ann_file} with {len(self)} data.\n\n")
 
     def load_corpus(self):
         corpus = []
@@ -52,8 +52,7 @@ class GeneralCorpusNP(Dataset):
                 all_text = f.read().lower()
                 corpus.extend([l.strip('\n').strip('\r').strip('\n') for l in all_text.split("\n")])
 
-        corpus = [l.strip() for l in corpus if l.strip() != '']
-        return corpus
+        return [l.strip() for l in corpus if l.strip() != '']
     
     def load_corpus_with_passages_preprocess(self):
         corpus = []
@@ -130,11 +129,7 @@ class GeneralCorpusNP(Dataset):
         return len(self.passage_split)
 
     def retrieve_a_piece(self, index, seq_len):
-        if index == 0:
-            begin = 0
-        else:
-            begin = self.passage_split[index - 1]
-        
+        begin = 0 if index == 0 else self.passage_split[index - 1]
         end = self.passage_split[index]
 
         text = self.corpus[begin:end]
@@ -147,38 +142,30 @@ class GeneralCorpusNP(Dataset):
         all_mlm_labels = []
         current_length = 0
         final_index = -1
-        
+
         for i in range(start_index, len(sentence_split)):
-            if i == 0:
-                begin = 0
-            else:
-                begin = sentence_split[i - 1]
+            begin = 0 if i == 0 else sentence_split[i - 1]
             end = sentence_split[i]
             tokens = self.tokenizer.convert_ids_to_tokens(text[begin:end])
             tokens, mlm_labels = self.random_word_wwm(tokens)
+            final_index = (i + 1) % len(sentence_split)
             if current_length == 0 or len(tokens) + current_length <= seq_len:
                 all_tokenized_words.extend(tokens)
                 all_mlm_labels.extend(mlm_labels)
                 current_length += len(tokens)
-                final_index = (i + 1) % len(sentence_split)
             else:
-                final_index = (i + 1) % len(sentence_split)
                 break
         self.sentence_counter[index] = final_index  # Start from here next time retrieve a piece is called; Not sure how this will behave if we have multiple workers...
         #print(index, self.sentence_counter[index])
         all_tokenized_words = all_tokenized_words[:seq_len]
         all_mlm_labels = all_mlm_labels[:seq_len]
-        
+
         return all_tokenized_words, all_mlm_labels
     
     def exhaustively_retrieve_a_piece(self, index, seq_len):
         all_ranges = []
 
-        if index == 0:
-            begin = 0
-        else:
-            begin = self.passage_split[index - 1]
-        
+        begin = 0 if index == 0 else self.passage_split[index - 1]
         end = self.passage_split[index]
 
         text = self.corpus[begin:end]
@@ -187,7 +174,7 @@ class GeneralCorpusNP(Dataset):
         ## Retrive part of 
         start_index = 0 #self.sentence_counter[index]
         while True:
-        
+
             all_tokenized_words = []
             all_mlm_labels = []
             current_length = 0
@@ -196,25 +183,19 @@ class GeneralCorpusNP(Dataset):
             sent_begin = 0
             sent_end = 0
             for i in range(start_index, len(sentence_split)):
-                if i == 0:
-                    sent_begin = 0
-                else:
-                    sent_begin = sentence_split[i - 1]
+                sent_begin = 0 if i == 0 else sentence_split[i - 1]
                 tmp_sent_end = sentence_split[i]
 
-                if current_length == 0 or (tmp_sent_end - sent_begin) + current_length <= seq_len:
-                    current_length += tmp_sent_end - sent_begin
-                    sent_end = tmp_sent_end
-                    final_index = (i + 1) % len(sentence_split)
-                else:
-                    final_index = (i + 1) % len(sentence_split)
+                final_index = (i + 1) % len(sentence_split)
+                if (
+                    current_length != 0
+                    and (tmp_sent_end - sent_begin) + current_length > seq_len
+                ):
                     break
 
-            if start_index == 0:
-                sent_begin = 0
-            else:
-                sent_begin = sentence_split[start_index - 1]
-
+                current_length += tmp_sent_end - sent_begin
+                sent_end = tmp_sent_end
+            sent_begin = 0 if start_index == 0 else sentence_split[start_index - 1]
             start_index = final_index
 
             all_ranges.append((begin + sent_begin, begin + sent_end))
@@ -341,7 +322,7 @@ class GeneralCorpusNP(Dataset):
             lm_label_ids = [-1] + text_a_labels + [-1] + text_b_labels + [-1]
             input_mask = [1] * len(input_ids)
             segment_ids = [0] * len(input_ids)
-            
+
             # Zero-pad up to the sequence length.
             while len(input_ids) < max_seq_length:
                 input_ids.append(0)
@@ -349,7 +330,7 @@ class GeneralCorpusNP(Dataset):
                 segment_ids.append(0)
                 lm_label_ids.append(-1)
 
-            features = InputFeatures(
+            return InputFeatures(
                 input_ids=input_ids,
                 input_mask=input_mask,
                 segment_ids=segment_ids,
@@ -362,15 +343,12 @@ class GeneralCorpusNP(Dataset):
                 },
                 is_matched=example.is_matched,
                 ans=-1,
-                visual_tags = None,
-                visual_tags_objective = None,
-                visual_tags_mask = None,
+                visual_tags=None,
+                visual_tags_objective=None,
+                visual_tags_mask=None,
                 visual_tags_box=None,
-                visual_tags_mismatch=None
+                visual_tags_mismatch=None,
             )
-            return features
-
-
         if example.mlm_labels is not None:  # The data is already pre-masked
             input_ids = example.token_ids
             lm_label_ids = example.mlm_labels
@@ -388,7 +366,7 @@ class GeneralCorpusNP(Dataset):
                 segment_ids.append(0)
                 lm_label_ids.append(-1)
 
-            features = InputFeatures(
+            return InputFeatures(
                 input_ids=input_ids,
                 input_mask=input_mask,
                 segment_ids=segment_ids,
@@ -401,14 +379,12 @@ class GeneralCorpusNP(Dataset):
                 },
                 is_matched=1,
                 ans=-1,
-                visual_tags = None,
-                visual_tags_objective = None,
-                visual_tags_mask = None,
+                visual_tags=None,
+                visual_tags_objective=None,
+                visual_tags_mask=None,
                 visual_tags_box=None,
-                visual_tags_mismatch=None
+                visual_tags_mismatch=None,
             )
-
-            return features
 
 
 
@@ -416,7 +392,7 @@ class GeneralCorpusNP(Dataset):
         output_tokens = []
         output_label = []
 
-        for i, token in enumerate(tokens):
+        for token in tokens:
             sub_tokens = self.tokenizer.wordpiece_tokenizer.tokenize(token)
             prob = random.random()
             # mask token with 15% probability
@@ -424,26 +400,24 @@ class GeneralCorpusNP(Dataset):
                 prob /= 0.15
 
                 # 80% randomly change token to mask token
-                if prob < 0.8:
-                    for sub_token in sub_tokens:
+                for sub_token in sub_tokens:
+                                # 80% randomly change token to mask token
+                    if prob < 0.8:
                         output_tokens.append("[MASK]")
-                # 10% randomly change token to random token
-                elif prob < 0.9:
-                    for sub_token in sub_tokens:
+                    elif prob < 0.9:
                         output_tokens.append(random.choice(list(self.tokenizer.vocab.keys())))
-                        # -> rest 10% randomly keep current token
-                else:
-                    for sub_token in sub_tokens:
+                    else:
                         output_tokens.append(sub_token)
 
-                        # append current token to output (we will predict these later)
                 for sub_token in sub_tokens:
                     try:
                         output_label.append(self.tokenizer.vocab[sub_token])
                     except KeyError:
                         # For unknown words (should not occur with BPE vocab)
                         output_label.append(self.tokenizer.vocab["[UNK]"])
-                        logging.warning("Cannot find sub_token '{}' in vocab. Using [UNK] insetad".format(sub_token))
+                        logging.warning(
+                            f"Cannot find sub_token '{sub_token}' in vocab. Using [UNK] insetad"
+                        )
             else:
                 for sub_token in sub_tokens:
                     # no masking token (will be ignored by loss function later)

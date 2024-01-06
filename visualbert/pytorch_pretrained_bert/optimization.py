@@ -14,6 +14,7 @@
 # limitations under the License.
 """PyTorch optimization for BERT model."""
 
+
 # Consistent with HuggingFace BERT version 3fc63f126ddf883ba9659f13ec046c3639db7b7e
 
 import math
@@ -28,10 +29,7 @@ import sys
 logger = logging.getLogger(__name__)
 
 
-if sys.version_info >= (3, 4):
-    ABC = abc.ABC
-else:
-    ABC = abc.ABCMeta('ABC', (), {})
+ABC = abc.ABC if sys.version_info >= (3, 4) else abc.ABCMeta('ABC', (), {})
 
 
 class _LRSchedule(ABC):
@@ -45,9 +43,11 @@ class _LRSchedule(ABC):
         """
         super(_LRSchedule, self).__init__(**kw)
         if t_total < 0:
-            logger.warning("t_total value of {} results in schedule not being applied".format(t_total))
-        if not 0.0 <= warmup < 1.0 and not warmup == -1:
-            raise ValueError("Invalid warmup: {} - should be in [0.0, 1.0[ or -1".format(warmup))
+            logger.warning(
+                f"t_total value of {t_total} results in schedule not being applied"
+            )
+        if not 0.0 <= warmup < 1.0 and warmup != -1:
+            raise ValueError(f"Invalid warmup: {warmup} - should be in [0.0, 1.0[ or -1")
         warmup = max(warmup, 0.)
         self.warmup, self.t_total = float(warmup), float(t_total)
         self.warned_for_t_total_at_progress = -1
@@ -65,8 +65,8 @@ class _LRSchedule(ABC):
         # warning for exceeding t_total (only active with warmup_linear
         if not nowarn and self.warn_t_total and progress > 1. and progress > self.warned_for_t_total_at_progress:
             logger.warning(
-                "Training beyond specified 't_total'. Learning rate multiplier set to {}. Please set 't_total' of {} correctly."
-                    .format(ret, self.__class__.__name__))
+                f"Training beyond specified 't_total'. Learning rate multiplier set to {ret}. Please set 't_total' of {self.__class__.__name__} correctly."
+            )
             self.warned_for_t_total_at_progress = progress
         # end warning
         return ret
@@ -105,9 +105,8 @@ class WarmupCosineSchedule(_LRSchedule):
     def get_lr_(self, progress):
         if progress < self.warmup:
             return progress / self.warmup
-        else:
-            progress = (progress - self.warmup) / (1 - self.warmup)   # progress after warmup
-            return 0.5 * (1. + math.cos(math.pi * self.cycles * 2 * progress))
+        progress = (progress - self.warmup) / (1 - self.warmup)   # progress after warmup
+        return 0.5 * (1. + math.cos(math.pi * self.cycles * 2 * progress))
 
 
 class WarmupCosineWithHardRestartsSchedule(WarmupCosineSchedule):
@@ -123,10 +122,8 @@ class WarmupCosineWithHardRestartsSchedule(WarmupCosineSchedule):
     def get_lr_(self, progress):
         if progress < self.warmup:
             return progress / self.warmup
-        else:
-            progress = (progress - self.warmup) / (1 - self.warmup)     # progress after warmup
-            ret = 0.5 * (1. + math.cos(math.pi * ((self.cycles * progress) % 1)))
-            return ret
+        progress = (progress - self.warmup) / (1 - self.warmup)     # progress after warmup
+        return 0.5 * (1. + math.cos(math.pi * ((self.cycles * progress) % 1)))
 
 
 class WarmupCosineWithWarmupRestartsSchedule(WarmupCosineWithHardRestartsSchedule):
@@ -144,10 +141,8 @@ class WarmupCosineWithWarmupRestartsSchedule(WarmupCosineWithHardRestartsSchedul
         progress = progress * self.cycles % 1.
         if progress < self.warmup:
             return progress / self.warmup
-        else:
-            progress = (progress - self.warmup) / (1 - self.warmup)     # progress after warmup
-            ret = 0.5 * (1. + math.cos(math.pi * progress))
-            return ret
+        progress = (progress - self.warmup) / (1 - self.warmup)     # progress after warmup
+        return 0.5 * (1. + math.cos(math.pi * progress))
 
 
 class WarmupConstantSchedule(_LRSchedule):
@@ -156,9 +151,7 @@ class WarmupConstantSchedule(_LRSchedule):
     Keeps learning rate equal to 1. after warmup.
     """
     def get_lr_(self, progress):
-        if progress < self.warmup:
-            return progress / self.warmup
-        return 1.
+        return progress / self.warmup if progress < self.warmup else 1.
 
 
 class WarmupLinearSchedule(_LRSchedule):
@@ -202,23 +195,22 @@ class BertAdam(Optimizer):
     def __init__(self, params, lr=required, warmup=-1, t_total=-1, schedule='warmup_linear',
                  b1=0.9, b2=0.999, e=1e-6, weight_decay=0.01, max_grad_norm=1.0, **kwargs):
         if lr is not required and lr < 0.0:
-            raise ValueError("Invalid learning rate: {} - should be >= 0.0".format(lr))
+            raise ValueError(f"Invalid learning rate: {lr} - should be >= 0.0")
         if not isinstance(schedule, _LRSchedule) and schedule not in SCHEDULES:
-            raise ValueError("Invalid schedule parameter: {}".format(schedule))
+            raise ValueError(f"Invalid schedule parameter: {schedule}")
         if not 0.0 <= b1 < 1.0:
-            raise ValueError("Invalid b1 parameter: {} - should be in [0.0, 1.0[".format(b1))
+            raise ValueError(f"Invalid b1 parameter: {b1} - should be in [0.0, 1.0[")
         if not 0.0 <= b2 < 1.0:
-            raise ValueError("Invalid b2 parameter: {} - should be in [0.0, 1.0[".format(b2))
-        if not e >= 0.0:
-            raise ValueError("Invalid epsilon value: {} - should be >= 0.0".format(e))
+            raise ValueError(f"Invalid b2 parameter: {b2} - should be in [0.0, 1.0[")
+        if e < 0.0:
+            raise ValueError(f"Invalid epsilon value: {e} - should be >= 0.0")
         # initialize schedule object
         if not isinstance(schedule, _LRSchedule):
             schedule_type = SCHEDULES[schedule]
             schedule = schedule_type(warmup=warmup, t_total=t_total)
-        else:
-            if warmup != -1 or t_total != -1:
-                logger.warning("warmup and t_total on the optimizer are ineffective when _LRSchedule object is provided as schedule. "
-                               "Please specify custom warmup and t_total in _LRSchedule object.")
+        elif warmup != -1 or t_total != -1:
+            logger.warning("warmup and t_total on the optimizer are ineffective when _LRSchedule object is provided as schedule. "
+                           "Please specify custom warmup and t_total in _LRSchedule object.")
         defaults = dict(lr=lr, schedule=schedule,
                         b1=b1, b2=b2, e=e, weight_decay=weight_decay,
                         max_grad_norm=max_grad_norm)
@@ -243,10 +235,7 @@ class BertAdam(Optimizer):
             closure (callable, optional): A closure that reevaluates the model
                 and returns the loss.
         """
-        loss = None
-        if closure is not None:
-            loss = closure()
-
+        loss = closure() if closure is not None else None
         for group in self.param_groups:
             for p in group['params']:
                 if p.grad is None:

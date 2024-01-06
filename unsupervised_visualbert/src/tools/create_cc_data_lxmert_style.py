@@ -2,23 +2,19 @@
 import json
 
 target = "/local/harold/vqa/google_concetual/train"
-with open("%s.tsv" % target, 'r') as f:
+with open(f"{target}.tsv", 'r') as f:
   lines = f.readlines()
 
 
-train_file_name = "/local/harold/ubert/lxmert/data/lxmert/{}.json".format("google_cc_train" if "train" in target else "google_cc_valid")
+train_file_name = f'/local/harold/ubert/lxmert/data/lxmert/{"google_cc_train" if "train" in target else "google_cc_valid"}.json'
 train_data = []
 
 for i in range(len(lines)):
-    caption, url = lines[i].strip('\n').split("\t", 1)
+  caption, url = lines[i].strip('\n').split("\t", 1)
 
-    one_datatum = {}
-    one_datatum["img_id"] = "{}/{}.jpg".format(target, i)
-    one_datatum["labelf"] = {}
-    one_datatum["sentf"] = {}
-    one_datatum["sentf"]["google_cc"] = []
-    one_datatum["sentf"]["google_cc"].append(caption)
-    train_data.append(one_datatum)
+  one_datatum = {"img_id": f"{target}/{i}.jpg", "labelf": {}, "sentf": {}}
+  one_datatum["sentf"]["google_cc"] = [caption]
+  train_data.append(one_datatum)
 
 with open(train_file_name, 'w') as f:
     json.dump(train_data, f)

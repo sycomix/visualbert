@@ -117,9 +117,15 @@ class LXMERTDataset:
         self.data = []
         for source in self.sources:
             try:
-                self.data.extend(json.load(open("data/lxmert/%s.json" % source)))
+                self.data.extend(json.load(open(f"data/lxmert/{source}.json")))
             except:
-                self.data.extend(json.load(open("/local/harold/ubert/lxmert/data/lxmert/%s.json" % source))) # hacky 
+                self.data.extend(
+                    json.load(
+                        open(
+                            f"/local/harold/ubert/lxmert/data/lxmert/{source}.json"
+                        )
+                    )
+                )
         print("Load %d data from %s" % (len(self.data), self.name))
 
         # Create answer table according to the qa_sets

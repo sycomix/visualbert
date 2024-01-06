@@ -40,24 +40,27 @@ class VisualBERTDetector(Model):
                  output_attention_weights: bool=False
                  ):
         super(VisualBERTDetector, self).__init__(vocab)
-        
+
         from utils.detector import SimpleDetector
         self.detector = SimpleDetector(pretrained=pretrained_detector, average_pool=True, semantic=class_embs, final_dim=512)
         ##################################################################################################
         self.bert = TrainVisualBERTObjective.from_pretrained(
-                bert_model_name,
-                cache_dir=os.path.join(str(PYTORCH_PRETRAINED_BERT_CACHE), 'distributed_{}'.format(-1)),
-                training_head_type = training_head_type,
-                visual_embedding_dim = visual_embedding_dim,
-                hard_cap_seq_len = hard_cap_seq_len,
-                cut_first = cut_first,
-                embedding_strategy = embedding_strategy,
-                bypass_transformer = bypass_transformer,
-                random_initialize = random_initialize,
-                output_attention_weights = output_attention_weights)
+            bert_model_name,
+            cache_dir=os.path.join(
+                str(PYTORCH_PRETRAINED_BERT_CACHE), 'distributed_-1'
+            ),
+            training_head_type=training_head_type,
+            visual_embedding_dim=visual_embedding_dim,
+            hard_cap_seq_len=hard_cap_seq_len,
+            cut_first=cut_first,
+            embedding_strategy=embedding_strategy,
+            bypass_transformer=bypass_transformer,
+            random_initialize=random_initialize,
+            output_attention_weights=output_attention_weights,
+        )
         if special_visual_initialize:
             self.bert.bert.embeddings.special_intialize()
-    
+
         self.training_head_type = training_head_type
         self._accuracy = CategoricalAccuracy()
         self._loss = torch.nn.CrossEntropyLoss()
@@ -76,7 +79,7 @@ class VisualBERTDetector(Model):
 
         # Add extra diminsions to the row broadcaster so it matches row_id
         leading_dims = len(span_tags.shape) - 2
-        for i in range(leading_dims):
+        for _ in range(leading_dims):
             row_id_broadcaster = row_id_broadcaster[..., None]
         row_id += row_id_broadcaster
         return object_reps[row_id.view(-1), span_tags_fixed.view(-1)].view(*span_tags_fixed.shape, -1)
@@ -211,20 +214,23 @@ class VisualBERTFixedImageEmbedding(Model):
         self.training_head_type = training_head_type
 
         self.bert = TrainVisualBERTObjective.from_pretrained(
-                bert_model_name,
-                cache_dir=os.path.join(str(PYTORCH_PRETRAINED_BERT_CACHE), 'distributed_{}'.format(-1)),
-                training_head_type = training_head_type,
-                visual_embedding_dim = visual_embedding_dim,
-                hard_cap_seq_len = hard_cap_seq_len,
-                cut_first = cut_first,
-                embedding_strategy = embedding_strategy,
-                bypass_transformer = bypass_transformer,
-                random_initialize = random_initialize,
-                output_attention_weights = output_attention_weights)
+            bert_model_name,
+            cache_dir=os.path.join(
+                str(PYTORCH_PRETRAINED_BERT_CACHE), 'distributed_-1'
+            ),
+            training_head_type=training_head_type,
+            visual_embedding_dim=visual_embedding_dim,
+            hard_cap_seq_len=hard_cap_seq_len,
+            cut_first=cut_first,
+            embedding_strategy=embedding_strategy,
+            bypass_transformer=bypass_transformer,
+            random_initialize=random_initialize,
+            output_attention_weights=output_attention_weights,
+        )
         if special_visual_initialize:
             self.bert.bert.embeddings.special_intialize()
 
-        if self.training_head_type == "nlvr" or self.training_head_type == "multichoice":
+        if self.training_head_type in {"nlvr", "multichoice"}:
             self._accuracy = CategoricalAccuracy()
         if "vqa" in self.training_head_type:
             self._accuracy = Average()
@@ -287,13 +293,12 @@ class VisualBERTFixedImageEmbedding(Model):
 
             output_all_encoded_layers = output_all_encoded_layers)
 
-        if self.training_head_type == "nlvr" or self.training_head_type == "multichoice":
+        if self.training_head_type in ["nlvr", "multichoice"]:
             logits = output_dict["logits"]
             self._accuracy(logits, label)
 
-        # Multi-process safe??
-        if "vqa" in self.training_head_type or self.training_head_type == "flickr":
-            if output_dict["accuracy"] is not None:
+        if output_dict["accuracy"] is not None:
+            if "vqa" in self.training_head_type or self.training_head_type == "flickr":
                 self._accuracy(output_dict["accuracy"])
 
         output_dict["cnn_regularization_loss"] = None
@@ -312,8 +317,7 @@ class VisualBERTFixedImageEmbedding(Model):
         one_hots = torch.zeros(*labels.size())
         one_hots = one_hots.cuda() if use_cuda else one_hots
         one_hots.scatter_(1, logits.view(-1, 1), 1)
-        scores = (one_hots * labels)
-        return scores
+        return (one_hots * labels)
 
 class SimpleReportMetric():
     def __init__(self):
